@@ -25,7 +25,8 @@ const labels: Record<string, string> = {
 };
 export function fieldLabel(field: string): string { return labels[field] ?? field; }
 
-const sharedOptional = ['crossref', 'xref', 'xdata', 'origdate', 'langid', 'label', 'shorthand', '_tags', '_notes'];
+const sharedOptional = ['_tags', '_notes'];
+const basicOptional = new Set(['author', 'editor', 'title', 'date', 'language', 'journaltitle', 'booktitle', 'publisher', 'institution', 'type', 'volume', 'number', 'pages', 'doi', 'url', 'urldate', 'isbn', 'edition', '_tags', '_notes']);
 const excluded = new Set(['abstract', 'annotation', 'keywords', 'file', 'library', 'execute']);
 const legacyDates = new Set(['year', 'month', 'day']);
 export const supportedFields = [...new Set([
@@ -45,7 +46,7 @@ export function getFieldActions(type: string, source: Record<string, string>): F
   const required = schema.required.filter(group => !group.some(has)).map(group => group.filter(usable)).filter(group => group.length);
   const missingRequired = new Set(required.flat());
   const optional = [...new Set([...schema.optional, ...schema.required.flat(), ...sharedOptional])]
-    .filter(field => usable(field) && !has(field) && !missingRequired.has(field));
+    .filter(field => basicOptional.has(field) && usable(field) && !has(field) && !missingRequired.has(field));
   const allowed = new Set([...definitions.globalFields, ...schema.allowed, ...schema.optional, ...schema.required.flat(), 'date', 'language']);
   const remove = Object.keys(source).filter(field => !field.startsWith('_') && !allowed.has(canonicalFieldName(field)));
   return { required, optional, remove };

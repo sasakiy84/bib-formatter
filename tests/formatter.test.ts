@@ -196,6 +196,9 @@ test('article fields distinguish required journal title from optional DOI and in
   const actions = getFieldActions('article', { title: 'Title', author: 'Smith, Jane', date: '2024', booktitle: 'Wrong', publisher: 'Wrong publisher', _tags: 'keep' });
   expect(actions.required).toEqual([['journaltitle']]);
   expect(actions.optional).toContain('doi');
+  expect(actions.optional).not.toContain('editora');
+  expect(actions.optional).not.toContain('pubstate');
+  expect(actions.optional).not.toContain('eprintclass');
   expect(actions.optional).toContain('_notes');
   expect(actions.optional).not.toContain('_tags');
   expect(actions.optional).not.toContain('title');
@@ -215,8 +218,9 @@ test('alternative required fields are satisfied by editor, year or DOI', () => {
   expect(getFieldActions('online', { title: 'Page' }).required).toContainEqual(['doi', 'eprint', 'url']);
 });
 test('valid optional fields survive conversion and can be added for their type', () => {
-  const added = addCommonField('@article{x,title={T},author={A},date={2024}}', 'addendum');
-  expect(added.entries[0]?.fields.addendum).toBe('');
+  const added = addCommonField('@article{x,title={T},author={A},date={2024},addendum={Keep existing}}', 'doi');
+  expect(added.entries[0]?.fields.doi).toBe('');
+  expect(added.entries[0]?.fields.addendum).toBe('Keep existing');
   expect(() => addCommonField(added.bib, 'booktitle')).toThrow('種別');
 });
 test('removes only the selected incompatible field and keeps custom data and preambles', () => {
