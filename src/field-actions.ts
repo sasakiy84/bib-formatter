@@ -19,15 +19,15 @@ const labels: Record<string, string> = {
   maintitle: '全集タイトル', mainsubtitle: '全集副題', maintitleaddon: '全集タイトル補足', bookauthor: '収録書著者',
   booksubtitle: '収録書副題', booktitleaddon: '収録書名補足', part: '部', edition: '版', volumes: '総巻数', location: '出版地',
   chapter: '章', pagetotal: '総ページ数', howpublished: '出版方法', holder: '権利者', eventtitle: '会議・催事名',
-  eventtitleaddon: '会議・催事名補足', eventdate: '開催日', venue: '開催地', crossref: '親文献キー', xref: '参照キー',
-  xdata: '共有データ参照', origdate: '初版年月日', langid: '組版言語', label: '引用ラベル', shorthand: '略称', entryset: '文献セット',
+  eventtitleaddon: '会議・催事名補足', eventdate: '開催日', venue: '開催地',
+  origdate: '初版年月日', langid: '組版言語', label: '引用ラベル', shorthand: '略称',
   _tags: 'タグ（ユーザー定義）', _notes: 'ノート（ユーザー定義）',
 };
 export function fieldLabel(field: string): string { return labels[field] ?? field; }
 
 const sharedOptional = ['_tags', '_notes'];
 const basicOptional = new Set(['author', 'editor', 'title', 'date', 'language', 'journaltitle', 'booktitle', 'publisher', 'institution', 'type', 'volume', 'number', 'pages', 'doi', 'url', 'urldate', 'isbn', 'edition', '_tags', '_notes']);
-const excluded = new Set(['abstract', 'annotation', 'keywords', 'file', 'library', 'execute', 'note']);
+const excluded = new Set(['abstract', 'annotation', 'keywords', 'file', 'library', 'execute', 'note', 'crossref', 'xref', 'xdata', 'related', 'relatedtype', 'relatedoptions', 'relatedstring', 'entryset', 'ids']);
 const legacyDates = new Set(['year', 'month', 'day']);
 export const supportedFields = [...new Set([
   ...definitions.globalFields,
@@ -41,7 +41,7 @@ export function getFieldActions(type: string, source: Record<string, string>): F
   const fields = new Set(Object.keys(source).map(canonicalFieldName));
   const has = (field: string): boolean => fields.has(field) || (field === 'date' && fields.has('year'));
   const usable = (field: string): boolean => !excluded.has(field) && !legacyDates.has(field);
-  // Unknown/custom styles and xdata containers have no reliable type-specific exclusion list.
+  // Unknown/custom styles have no reliable type-specific exclusion list.
   if (!schema) return { required: [], optional: ['author', 'editor', 'title', 'date', 'language', 'journaltitle', 'booktitle', 'publisher', 'volume', 'number', 'pages', 'doi', 'url', 'urldate', '_tags', '_notes'].filter(field => !has(field)), remove: [] };
   const required = schema.required.filter(group => !group.some(has)).map(group => group.filter(usable)).filter(group => group.length);
   const missingRequired = new Set(required.flat());

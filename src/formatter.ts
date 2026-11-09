@@ -2,7 +2,7 @@ import { canonicalFieldName, getFieldActions, supportedFields } from './field-ac
 import { japaneseAuthorList } from './authors';
 import { parse, parseVerbatim, type VerbatimEntry, type Creator } from '@retorquere/bibtex-parser/js';
 
-const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher location institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid crossref xref xdata related relatedtype entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
+const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher location institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
 const retained = new Set([...fieldOrder, ...supportedFields]);
 const typeAliases: Record<string, string> = { conference: 'inproceedings', techreport: 'report', phdthesis: 'thesis', mastersthesis: 'thesis', electronic: 'online', www: 'online' };
 
@@ -68,30 +68,17 @@ export function makeCitationKey(fields: Record<string, string>, type = 'misc'): 
   return `${surname}${year}${firstPage ? `p${firstPage}` : ''}`;
 }
 
-// Update references together with keys so normalized citations still point at the same entries.
 function normalizeCitationKeys(entries: Pick<VerbatimEntry, 'type' | 'key' | 'fields'>[], warnings: string[], selectedIndex?: number): void {
   const generated = entries.map((entry, index) => selectedIndex !== undefined && index !== selectedIndex
     ? '' : makeCitationKey(entry.fields, entry.type));
   const candidates = entries.map((entry, index) => generated[index] || entry.key);
   const counts = new Map<string, number>();
   for (const key of candidates) if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
-  const renamed = new Map<string, string>();
   for (const [index, entry] of entries.entries()) {
     const candidate = candidates[index] ?? '';
     const key = !generated[index] || counts.get(candidate) === 1 ? candidate : '';
     if (candidate && !key) warnings.push(`引用キー ${candidate} が重複するため、空欄にしました。`);
-    if (entry.key && entry.key !== key) renamed.set(entry.key, key);
     entry.key = key;
-  }
-  for (const entry of entries) {
-    for (const field of ['crossref', 'xref', 'xdata', 'related', 'entryset']) {
-      if (!entry.fields[field]) continue;
-      entry.fields[field] = entry.fields[field]!.replace(/[^,\s]+/g, reference => {
-        const replacement = renamed.get(reference);
-        if (replacement === '') warnings.push(`参照先 ${reference} の引用キーを生成できません。参照を確認してください。`);
-        return replacement || reference;
-      });
-    }
   }
 }
 
@@ -144,24 +131,11 @@ export function convertBib(input: string, { generateKeys = true, language }: { g
     return { key: entry.key, type, fields, filename: '', removed };
   });
   if (generateKeys) normalizeCitationKeys(entries, warnings);
-  const byKey = new Map(entries.filter(entry => entry.key).map(entry => [entry.key, entry]));
   for (const entry of entries) {
-    const effective = { ...entry.fields };
-    // Resolve common crossref metadata for filenames without changing biblatex inheritance.
-    const seen = new Set([entry.key]);
-    let parentKey = effective.crossref ?? effective.xref;
-    while (parentKey) {
-      if (seen.has(parentKey)) { warnings.push(`${entry.key}: crossref が循環しています。`); break; }
-      seen.add(parentKey);
-      const parent = byKey.get(parentKey);
-      if (!parent) { warnings.push(`${entry.key}: 参照先 ${parentKey} が入力にありません。`); break; }
-      for (const name of ['author', 'editor', 'date', 'year']) if (!effective[name] && parent.fields[name]) effective[name] = parent.fields[name];
-      parentKey = parent.fields.crossref ?? parent.fields.xref;
-    }
-    entry.filename = makeFilename(effective);
-    if (!effective.title && entry.type !== 'xdata') warnings.push(`${entry.key}: title がありません。`);
-    if (!effective.author && !effective.editor && entry.type !== 'xdata') warnings.push(`${entry.key}: author / editor がありません。`);
-    if (!effective.date && !effective.year && entry.type !== 'xdata') warnings.push(`${entry.key}: 出版年がありません。`);
+    entry.filename = makeFilename(entry.fields);
+    if (!entry.fields.title) warnings.push(`${entry.key}: title がありません。`);
+    if (!entry.fields.author && !entry.fields.editor) warnings.push(`${entry.key}: author / editor がありません。`);
+    if (!entry.fields.date && !entry.fields.year) warnings.push(`${entry.key}: 出版年がありません。`);
   }
   const filenames = new Set<string>();
   for (const entry of entries) {

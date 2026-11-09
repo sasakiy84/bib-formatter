@@ -60,10 +60,10 @@ describe('biblatex conversion', () => {
     expect(first('@mastersthesis{x,title={T}}').fields.type).toBe('mathesis');
     expect(first('@techreport{x,title={R},institution={Lab},number={TR-1}}').type).toBe('report');
   });
-  test('crossref retains references and inherits the year for filenames', () => {
+  test('crossref is removed without inheriting metadata from another entry', () => {
     const converted = convertBib('@inproceedings{child,title={Paper},author={Smith, Jane},crossref={parent}}\n@proceedings{parent,title={Conference},year=2025,editor={Lee, Sam}}');
-    expect(converted.entries[0]?.filename).toBe('2025_Smith_Paper');
-    expect(converted.entries[0]?.fields.crossref).toBe('parent');
+    expect(converted.entries[0]?.filename).toBe('nd_Smith_Paper');
+    expect(converted.entries[0]?.fields.crossref).toBeUndefined();
   });
   test('preserves preambles as valid BibTeX', () => {
     const input = String.raw`@preamble{"\newcommand{\foo}{bar}"} @misc{x,title={\foo Test}}`;
@@ -83,9 +83,8 @@ describe('biblatex conversion', () => {
     expect(() => convertBib('Hello')).toThrow();
     expect(() => convertBib('@misc{x,title={A}} @misc{x,title={B}}')).toThrow('重複');
   });
-  test('warns about missing information, unresolved references and unknown entry types', () => {
+  test('warns about missing information and unknown entry types', () => {
     const converted = convertBib('@unknown{x,crossref={missing}}');
-    expect(converted.warnings.join('\n')).toContain('missing');
     expect(converted.warnings.join('\n')).toContain('title');
     expect(converted.warnings.join('\n')).toContain('未知');
   });
@@ -166,24 +165,18 @@ test('incollection keys append only the starting page when it is available', () 
   expect(first('@incollection{old,author={Smith, Jane},year=2024,pages={unknown},pagetotal={123}}').key).toBe('Smith2024');
   expect(first('@inproceedings{old,author={Smith, Jane},year=2024,pages={123-145}}').key).toBe('Smith2024');
 });
-test('renamed keys update single and comma-separated bibliography references', () => {
-  const converted = convertBib('@book{old,author={Smith, Jane},date={2024},title={Book}} @incollection{child,author={Lee, Sam},date={2025},pages={123-140},crossref={old},xref={old},related={old, child},xdata={old},entryset={old, child}}');
-  expect(converted.entries.map(entry => entry.key)).toEqual(['Smith2024', 'Lee2025p123']);
-  expect(converted.entries[1]?.fields.crossref).toBe('Smith2024');
-  expect(converted.entries[1]?.fields.xref).toBe('Smith2024');
-  expect(converted.entries[1]?.fields.related).toBe('Smith2024, Lee2025p123');
-  expect(converted.entries[1]?.fields.xdata).toBe('Smith2024');
-  expect(converted.entries[1]?.fields.entryset).toBe('Smith2024, Lee2025p123');
-  expect(convertBib(converted.bib).bib).toBe(converted.bib);
+test('conversion removes cross-entry reference fields while preserving custom fields', () => {
+  const converted = first('@article{old,author={Linell, Per},year=2019,title={Example},crossref={book},xref={book},xdata={shared},related={a,b},relatedtype={reprintof},relatedoptions={skipbib},relatedstring={Other},entryset={a,b},ids={alias},_notes={Keep}}');
+  expect(converted.key).toBe('Linell2019');
+  expect(converted.fields).toEqual({ author: 'Linell, Per', date: '2019', title: 'Example', _notes: 'Keep' });
+  expect(converted.removed).toEqual(['crossref', 'xref', 'xdata', 'related', 'relatedtype', 'relatedoptions', 'relatedstring', 'entryset', 'ids']);
 });
 test('type changes add and remove an incollection key page suffix', () => {
-  const input = '@article{Smith2024,author={Smith, Jane},date={2024},pages={123--145}} @misc{other,title={Other},crossref={Smith2024}}';
+  const input = '@article{Smith2024,author={Smith, Jane},date={2024},pages={123--145}}';
   const chapter = changeEntryType(input, 'Smith2024', 'incollection');
   expect(chapter.entries[0]?.key).toBe('Smith2024p123');
-  expect(chapter.entries[1]?.fields.crossref).toBe('Smith2024p123');
   const article = changeEntryType(chapter.bib, 'Smith2024p123', 'article');
   expect(article.entries[0]?.key).toBe('Smith2024');
-  expect(article.entries[1]?.fields.crossref).toBe('Smith2024');
 });
 test('leaves keys empty when author or publication year is unavailable', () => {
   const converted = convertBib('@misc{,author={山田, 太郎},title={No year}} @misc{,year=2024,title={No author}} @book{,editor={Smith, Jane},year=2024,title={Editor only}}');
