@@ -42,9 +42,9 @@ export function makeFilename(fields: Record<string, string>): string {
   const creators = normalized?.author ?? normalized?.editor ?? [];
   const authors = creators.slice(0, 3).map(creatorName).join('-') + (creators.length > 3 ? '-et-al' : '');
   const date = fields.date ?? fields.year ?? '';
-  const year = date.match(/^-?\d{4}/)?.[0] ?? 'n.d.';
+  const year = date.match(/^-?\d{4}/)?.[0] ?? 'nd';
   const title = typeof normalized?.title === 'string' ? normalized.title : fields.title ?? 'Untitled';
-  const parts = [year === 'n.d.' ? year : filenamePart(year), filenamePart(authors) || 'Unknown', filenamePart(title) || 'Untitled'];
+  const parts = [filenamePart(year), filenamePart(authors) || 'Unknown', filenamePart(title) || 'Untitled'];
   // Keep the UTF-8 basename below common 255-byte limits, including room for a .pdf extension.
   let filename = parts.join('_');
   while (new TextEncoder().encode(filename).length > 240) filename = Array.from(filename).slice(0, -1).join('');

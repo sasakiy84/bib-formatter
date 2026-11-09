@@ -31,17 +31,17 @@ test('corporate XMP author containing and remains a single author', async () => 
   const xmp = '<rdf:Description xmlns:rdf="rdf" xmlns:dc="dc"><dc:creator><rdf:Seq><rdf:li>Research and Development Group</rdf:li></rdf:Seq></dc:creator><dc:title>Annual Report</dc:title></rdf:Description>';
   const conversion = await convertPdf(await makePdf({ xmp }));
   expect(conversion.entries[0]?.fields.author).toBe('{Research and Development Group}');
-  expect(conversion.entries[0]?.filename).toBe('n.d._Research-and-Development-Group_Annual-Report');
+  expect(conversion.entries[0]?.filename).toBe('nd_Research-and-Development-Group_Annual-Report');
 });
 test('PDF creation year is not substituted for publication year', async () => {
   const conversion = await convertPdf(await makePdf({ title: 'Undated Paper', author: 'Smith, Jane' }));
   expect(conversion.entries[0]?.fields.date).toBeUndefined();
-  expect(conversion.entries[0]?.filename).toBe('n.d._Smith_Undated-Paper');
+  expect(conversion.entries[0]?.filename).toBe('nd_Smith_Undated-Paper');
   expect(conversion.warnings.join('\n')).toContain('出版日がありません');
 });
 test('PDF without metadata exports an editable placeholder and missing-field warnings', async () => {
   const conversion = await convertPdf(await makePdf());
-  expect(conversion.entries[0]?.filename).toBe('n.d._Unknown_Untitled');
+  expect(conversion.entries[0]?.filename).toBe('nd_Unknown_Untitled');
   expect(conversion.warnings.join('\n')).toContain('title がありません');
   expect(conversion.warnings.join('\n')).toContain('author / editor がありません');
 });

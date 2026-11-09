@@ -86,7 +86,7 @@ test('PDF without publication date shows missing information and allows correcti
   const { makePdf } = await import('../pdf-fixtures');
   await page.goto('/');
   await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: '日本語.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ title: '日本語の研究', author: '佐藤, 花子' })) });
-  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('n.d._佐藤_日本語の研究');
+  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('nd_佐藤_日本語の研究');
   await expect(page.getByLabel('確認する項目')).toContainText('PDF に出版日がありません');
   const source = page.getByRole('textbox', { name: '入力する .bib' });
   await source.fill((await source.inputValue()).replace('@misc{pdf-import,', '@misc{pdf-import,\n  date = {2025},'));

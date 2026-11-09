@@ -98,8 +98,8 @@ describe('copyable filenames', () => {
     expect(makeFilename({ year: '2024', author: String.raw`von Neumann, John and {Research and Development Group} and M{\"u}ller, Anna`, title: 'The {NASA} Study' })).toBe('2024_von-Neumann-Research-and-Development-Group-Müller_The-NASA-Study');
   });
   test('uses editor as fallback without inventing missing dates', () => {
-    expect(makeFilename({ editor: '山田, 太郎', title: '参考資料' })).toBe('n.d._山田_参考資料');
-    expect(makeFilename({ title: 'Unknown Work' })).toBe('n.d._Unknown_Unknown-Work');
+    expect(makeFilename({ editor: '山田, 太郎', title: '参考資料' })).toBe('nd_山田_参考資料');
+    expect(makeFilename({ title: 'Unknown Work' })).toBe('nd_Unknown_Unknown-Work');
   });
   test('removes whitespace and filesystem-reserved characters', () => {
     const name = makeFilename({ year: '2024', author: 'Smith, Jane', title: 'A: title / with "quotes"? * <tags> | \\ test. ' });
