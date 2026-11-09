@@ -112,3 +112,31 @@ test('PDF conversion works in the standalone offline HTML', async ({ page, conte
   await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2024_Smith_Offline-Study');
   expect(requests).toHaveLength(1);
 });
+test('Japanese type controls update the selected bibliography entry', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'サンプルを入力' }).click();
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  await page.getByRole('combobox', { name: 'nakaya1938 の文献種別' }).selectOption({ label: '博士論文' });
+  await page.getByRole('button', { name: 'nakaya1938 の種別を変更', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/@thesis\{nakaya1938,/);
+  await expect(page.getByRole('textbox', { name: '入力する .bib' })).toHaveValue(/type = \{phdthesis\}/);
+  await expect(page.getByRole('combobox', { name: 'turing1936 の文献種別' })).toHaveValue('article');
+  await expect(page.getByRole('combobox', { name: 'nakaya1938 の文献種別' })).toBeFocused();
+  await page.screenshot({ path: 'test-results/type-controls.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+test('extracts missing information from first-page text offline with an embedded PDF worker', async ({ page, context }) => {
+  const { makePdf } = await import('../pdf-fixtures');
+  await context.setOffline(true);
+  await page.goto(new URL('../../dist/index.html', import.meta.url).href);
+  await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'synthetic.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ text: [
+    { text: 'Example Conference (2025)', x: 80, y: 810, size: 10 },
+    { text: 'A Synthetic Paper Title', x: 80, y: 740, size: 18 },
+    { text: 'Jane Smith', x: 80, y: 715, size: 12 },
+    { text: 'Alex Jones', x: 220, y: 715, size: 12 },
+  ] })) });
+  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2025_Smith-Jones_A-Synthetic-Paper-Title');
+  await expect(page.getByRole('combobox', { name: 'pdf-import の文献種別' })).toHaveValue('inproceedings');
+  await expect(page.getByLabel('確認する項目')).toContainText('1ページ目の見出しから');
+});

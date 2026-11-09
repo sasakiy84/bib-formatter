@@ -1,8 +1,9 @@
 import { PDFDocument, PDFName, PDFHexString, PDFDict } from 'pdf-lib';
 
-export async function makePdf(options: { title?: string; author?: string; year?: string; xmp?: string } = {}): Promise<Uint8Array> {
+export async function makePdf(options: { title?: string; author?: string; year?: string; xmp?: string; text?: { text: string; x: number; y: number; size: number }[] } = {}): Promise<Uint8Array> {
   const document = await PDFDocument.create();
-  document.addPage();
+  const page = document.addPage();
+  for (const line of options.text ?? []) page.drawText(line.text, { x: line.x, y: line.y, size: line.size });
   if (options.title) document.setTitle(options.title);
   if (options.author) document.setAuthor(options.author);
   document.setCreationDate(new Date('1999-01-01T00:00:00Z'));

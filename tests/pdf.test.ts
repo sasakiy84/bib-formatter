@@ -1,3 +1,4 @@
+import { inferHeading, japaneseAuthorList } from '../src/pdf-text';
 import { expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
 import { convertPdf, metadataToBib, parseXmp } from '../src/pdf';
@@ -61,4 +62,32 @@ test('corrupt and non-PDF files fail with a useful message', async () => {
 });
 test('XMP rejects document types and entity definitions without network resolution', () => {
   expect(() => parseXmp('<!DOCTYPE test [<!ENTITY secret SYSTEM "https://example.org">]><test>&secret;</test>')).toThrow();
+});
+
+test('ignores stale XMP tool defaults in favor of useful Info metadata', async () => {
+  const xmp = '<rdf:Description xmlns:rdf="rdf" xmlns:dc="dc"><dc:title>LaTeX with hyperref</dc:title><dc:creator>LaTeX with hyperref</dc:creator></rdf:Description>';
+  const converted = await convertPdf(await makePdf({ title: '架空の研究', author: '山田 太郎, 鈴木 花子, 佐藤 一郎, 田中 次郎', year: '2025', xmp }));
+  expect(converted.entries[0]?.filename).toBe('2025_山田-鈴木-佐藤-et-al_架空の研究');
+  expect(converted.entries[0]?.fields.author).toBe('山田, 太郎 and 鈴木, 花子 and 佐藤, 一郎 and 田中, 次郎');
+});
+test('Japanese name splitting preserves Western comma notation', () => {
+  expect(japaneseAuthorList('Smith, Jane')).toEqual(['Smith, Jane']);
+  expect(japaneseAuthorList('山田, 太郎')).toEqual(['山田, 太郎']);
+  expect(japaneseAuthorList('山田 太郎, 鈴木 花子')).toEqual(['山田, 太郎', '鈴木, 花子']);
+});
+test('infers Japanese publication date, title, authors and proceedings from the first-page heading', () => {
+  const metadata = inferHeading([
+    { text: '架空学会 第10回年次大会 発表論文集（2025年4月）', size: 10, top: .04 },
+    { text: '架空の日本語文献の研究', size: 18, top: .12 },
+    { text: '山田 太郎 1  鈴木 花子 2', size: 12, top: .16 },
+    { text: '1 架空大学 2 架空研究所', size: 10, top: .19 },
+    { text: '参考文献 1999年', size: 10, top: .9 },
+  ]);
+  expect(metadata.publicationDate).toBe('2025-04');
+  expect(metadata.title).toBe('架空の日本語文献の研究');
+  expect(metadata.authors).toEqual(['山田, 太郎', '鈴木, 花子']);
+  expect(metadata.booktitle).toBe('架空学会 第10回年次大会 発表論文集');
+});
+test('does not infer publication year from body references', () => {
+  expect(inferHeading([{ text: 'See Smith (1999)', size: 10, top: .7 }]).publicationDate).toBeUndefined();
 });

@@ -1,5 +1,5 @@
 import { convertPdf } from './pdf';
-import { convertBib, type Conversion } from './formatter';
+import { changeEntryType, convertBib, type Conversion } from './formatter';
 import { exampleBib } from './examples';
 
 function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
@@ -47,6 +47,30 @@ function displayResult(conversion: Conversion): void {
   const messages = [...result.warnings, ...result.entries.filter(entry => entry.removed.length).map(entry => `${entry.key}: 削除したフィールド — ${entry.removed.join(', ')}`)];
   for (const message of messages) { const li = document.createElement('li'); li.textContent = message; warnings.append(li); }
   for (const entry of result.entries) {
+    const controls = document.createElement('div'); controls.className = 'toolbar';
+    const typeLabel = document.createElement('label'); typeLabel.textContent = '文献種別 ';
+    const typeSelect = document.createElement('select'); typeSelect.setAttribute('aria-label', `${entry.key} の文献種別`); typeSelect.dataset.entryKey = entry.key;
+    const choices: [string, string][] = [['article', '雑誌論文'], ['inproceedings', '会議論文'], ['book', '書籍'], ['incollection', '書籍の章'], ['phdthesis', '博士論文'], ['mathesis', '修士論文'], ['thesis', 'その他の学位論文'], ['report', '報告書'], ['online', 'Webページ'], ['unpublished', '未刊行資料'], ['misc', 'その他・未分類']];
+    const selected = entry.type === 'thesis' && ['phdthesis', 'mathesis'].includes(entry.fields.type ?? '') ? entry.fields.type! : entry.type;
+    if (!choices.some(([type]) => type === selected)) choices.push([selected, `その他の種別（${selected}）`]);
+    for (const [value, text] of choices) { const option = document.createElement('option'); option.value = value; option.textContent = text; typeSelect.append(option); }
+    typeSelect.value = selected;
+    typeLabel.append(typeSelect);
+    const changeType = document.createElement('button'); changeType.textContent = '種別を変更'; changeType.setAttribute('aria-label', `${entry.key} の種別を変更`);
+    changeType.addEventListener('click', () => {
+      if (!result) return;
+      try {
+        const updated = changeEntryType(result.bib, entry.key, typeSelect.value);
+        updated.warnings = [...new Set([...result.warnings, ...updated.warnings])];
+        for (const changed of updated.entries) changed.removed = result.entries.find(previous => previous.key === changed.key)?.removed ?? [];
+        source.value = updated.bib;
+        invalidate(); displayResult(updated);
+        status.textContent = `${entry.key} の種別を変更しました。`;
+        const nextSelect = [...document.querySelectorAll<HTMLSelectElement>('select')].find(select => select.dataset.entryKey === entry.key);
+        nextSelect?.focus();
+      } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+    });
+    controls.append(typeLabel, changeType);
     const row = document.createElement('div'); row.className = 'filename-row';
     const label = document.createElement('label'); label.textContent = entry.key;
     const input = document.createElement('input'); input.readOnly = true; input.value = entry.filename;
@@ -54,7 +78,8 @@ function displayResult(conversion: Conversion): void {
     label.append(input);
     const button = document.createElement('button'); button.textContent = 'コピー'; button.type = 'button'; button.setAttribute('aria-label', `${entry.key} のファイル名をコピー`);
     button.addEventListener('click', () => void copyText(entry.filename, input));
-    row.append(label, button); filenames.append(row);
+    row.append(label, button);
+    const group = document.createElement('div'); group.className = 'filename-entry'; group.append(row, controls); filenames.append(group);
   }
   copy.disabled = download.disabled = copyNames.disabled = false;
 }
@@ -67,7 +92,7 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
   invalidate();
   const revision = inputRevision;
   const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
-  status.textContent = isPdf ? 'PDF のメタデータを読み込んでいます…' : 'ファイルを読み込んでいます…';
+  status.textContent = isPdf ? 'PDF のメタデータと1ページ目を読み込んでいます…' : 'ファイルを読み込んでいます…';
   try {
     if (isPdf) {
       const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()));

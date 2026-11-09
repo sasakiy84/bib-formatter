@@ -14,7 +14,7 @@ export interface FormattedEntry {
 }
 export interface Conversion { bib: string; entries: FormattedEntry[]; warnings: string[] }
 
-function serialize(entry: Pick<VerbatimEntry, 'type' | 'key' | 'fields'>): string {
+export function serialize(entry: Pick<VerbatimEntry, 'type' | 'key' | 'fields'>): string {
   const names = Object.keys(entry.fields).sort((a, b) => {
     const ai = fieldOrder.indexOf(a), bi = fieldOrder.indexOf(b);
     return (ai < 0 ? fieldOrder.length : ai) - (bi < 0 ? fieldOrder.length : bi) || a.localeCompare(b, 'en');
@@ -120,4 +120,18 @@ export function convertBib(input: string): Conversion {
   }
   const preambles = library.preambles.map(value => `@preamble{${value}}`);
   return { bib: [...preambles, ...entries.map(serialize)].join('\n\n') + '\n', entries, warnings };
+}
+
+export function changeEntryType(input: string, key: string, selection: string): Conversion {
+  const supported = new Set(['article', 'inproceedings', 'book', 'incollection', 'thesis', 'phdthesis', 'mathesis', 'report', 'online', 'unpublished', 'misc']);
+  if (!supported.has(selection)) throw new Error('変更先の文献種別を選択してください。');
+  const library = parseVerbatim(input);
+  if (library.errors.length) throw new Error('bib を読み込めません。');
+  const entry = library.entries.find(entry => entry.key === key);
+  if (!entry) throw new Error('変更する文献が見つかりません。');
+  entry.type = ['phdthesis', 'mathesis'].includes(selection) ? 'thesis' : selection;
+  if (entry.type === 'thesis' && selection !== 'thesis') entry.fields.type = selection;
+  else if (['phdthesis', 'mathesis'].includes(entry.fields.type ?? '')) delete entry.fields.type;
+  const preambles = library.preambles.map(value => `@preamble{${value}}`);
+  return convertBib([...preambles, ...library.entries.map(serialize)].join('\n\n'));
 }

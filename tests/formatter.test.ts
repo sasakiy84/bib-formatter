@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { convertBib, makeFilename } from '../src/formatter';
+import { changeEntryType, convertBib, makeFilename } from '../src/formatter';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
@@ -114,4 +114,19 @@ describe('copyable filenames', () => {
   test('warns about filename collisions', () => {
     expect(convertBib('@misc{a,title={Same}} @misc{b,title={Same}}').warnings.join('\n')).toContain('ファイル名が重複');
   });
+});
+
+test('changes only the selected entry type and preserves other entries and custom fields', () => {
+  const input = '@misc{a,title={A},author={Smith, Jane},year=2024,_read={yes}} @book{b,title={B},year=2025}';
+  const changed = changeEntryType(input, 'a', 'inproceedings');
+  expect(changed.entries[0]?.type).toBe('inproceedings');
+  expect(changed.entries[0]?.fields._read).toBe('yes');
+  expect(changed.entries[0]?.filename).toBe('2024_Smith_A');
+  expect(changed.entries[1]?.type).toBe('book');
+});
+test('degree selection produces biblatex thesis type and can be changed again', () => {
+  const changed = changeEntryType('@misc{x,title={T}}', 'x', 'phdthesis');
+  expect(changed.entries[0]?.type).toBe('thesis');
+  expect(changed.entries[0]?.fields.type).toBe('phdthesis');
+  expect(changeEntryType(changed.bib, 'x', 'article').entries[0]?.fields.type).toBeUndefined();
 });

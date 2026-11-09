@@ -14,7 +14,9 @@
     header { margin-bottom: 2rem; }
     header p { margin-top: 0; }
     .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-block: .8rem; }
-    button, input { font: inherit; }
+    button, input, select { font: inherit; }
+    select { max-width: 100%; padding: .4rem; }
+    .filename-entry { padding-block: .5rem; border-bottom: 1px solid GrayText; }
     button { padding: .4rem .85rem; cursor: pointer; }
     button:disabled { cursor: default; }
     input[type=file] { max-width: 100%; }
@@ -37,7 +39,7 @@
 <body>
   <header>
     <h1>Bib Formatter</h1>
-    <p>.bib や PDF のメタデータから、biblatex と文献のファイル名を作成。</p>
+    <p>.bib や PDF から、biblatex と文献のファイル名を作成。</p>
   </header>
   <main>
     <div class="panes">
@@ -65,13 +67,13 @@
     <p id="status" role="status" aria-live="polite"></p>
     <ul id="warnings" aria-label="確認する項目"></ul>
     <section aria-labelledby="filenames-title">
-      <div class="result-head"><h2 id="filenames-title">ファイル名</h2><button id="copy-names" disabled>すべてコピー</button></div>
+      <div class="result-head"><h2 id="filenames-title">文献とファイル名</h2><button id="copy-names" disabled>すべてコピー</button></div>
       <p>Year_Authors_Title ・著者は最大3人、4人以上は et-al ・拡張子なし</p>
       <div id="filenames"></div>
     </section>
     <details>
       <summary>変換ルール</summary>
-      <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。本文解析や OCR は行いません。生成した bib は入力欄で修正し、再変換できます。</p>
+      <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。不足する情報は1ページ目の見出しから推定し、確認を促します。OCR は行いません。生成した bib は入力欄で修正し、再変換できます。</p>
       <p>引用キーと LaTeX の大文字保護・数式を保持し、フィールド名・並び順・波括弧の形式を統一します。journal → journaltitle、address → location、school → institution、year / month → date など、BibTeX の表記を biblatex に寄せます。</p>
       <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子・文献間の参照と、アンダーバー（_）で始まる独自フィールドを残します。abstract・keywords・file・メモなどは削除し、削除したフィールドを件数とともに表示します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
       <p>ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは nd、著者なしは Unknown と表示します。</p>
