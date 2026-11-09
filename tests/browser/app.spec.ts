@@ -250,3 +250,36 @@ test('unnamed entries keep empty keys and support separate type edits', async ({
   await page.getByRole('button', { name: 'キーなし（文献2） の種別を変更', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/@misc\{,[\s\S]*@book\{,/);
 });
+test('input language setting supports Japanese, English and named other languages', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: '入力する .bib' });
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  const language = page.getByRole('combobox', { name: '言語', exact: true });
+  await expect(language).toHaveValue('japanese');
+  await source.fill('@misc{,author={山田 太郎},title={研究},year=2026}');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  await expect(output).toHaveValue(/language = \{japanese\}/);
+  await expect(page.getByLabel('山田2026', { exact: true })).toHaveValue('2026_山田_研究');
+  await language.selectOption({ label: '英語' });
+  await source.fill('@misc{,author={Jane Smith},title={A Study},year=2025}');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  await expect(output).toHaveValue(/language = \{english\}/);
+  await expect(page.getByLabel('Smith2025', { exact: true })).toHaveValue('2025_Smith_A-Study');
+  await language.selectOption({ label: 'その他' });
+  await page.getByRole('textbox', { name: '言語名', exact: true }).fill('french');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  await expect(output).toHaveValue(/language = \{french\}/);
+  await page.getByRole('textbox', { name: '言語名', exact: true }).fill('');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  await expect(output).toHaveValue(/language = \{\}/);
+  await page.screenshot({ path: 'test-results/language-settings-390.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+test('PDF import uses the selected input language', async ({ page }) => {
+  const { makePdf } = await import('../pdf-fixtures');
+  await page.goto('/');
+  await page.getByRole('combobox', { name: '言語', exact: true }).selectOption('english');
+  await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'language.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ title: 'A Study', author: 'Jane Smith', year: '2025' })) });
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/language = \{english\}/);
+});

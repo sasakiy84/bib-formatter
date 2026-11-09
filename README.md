@@ -28,6 +28,8 @@ PDF は埋め込みメタデータだけを読み取ります。1ページ目の
 
 ## 変換ルール
 
+入力側の「言語」で日本語・英語・その他を選べます。変換時に各文献へ `language = {japanese}` または `language = {english}` を設定します。「その他」では言語名を指定でき、未入力なら `language = {}` とします。選択した言語は既存の language より優先します。日本語では「姓 名」の著者表記を「姓, 名」に整え、英語ではBibTeXの人名表記を使います。PDF取り込みにも同じ言語設定を適用します。
+
 - 既存の引用キーと文献順を保持し、種別・標準フィールド名は小文字、値は波括弧、フィールド順は固定にします。LaTeX・数式・大文字保護は保持します。
 - `journal → journaltitle`、`address → location`、`school → institution`、`archiveprefix → eprinttype`、`primaryclass → eprintclass` を変換します。両方ある場合は biblatex 側を優先し、値の相違を表示します。
 - `conference → inproceedings`、`techreport → report`、`phdthesis / mastersthesis → thesis`、`electronic / www → online` を変換します。学位種別を `type` に残します。

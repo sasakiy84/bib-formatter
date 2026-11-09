@@ -1,6 +1,7 @@
+import { japaneseAuthorList } from '../src/authors';
 import { expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { convertPdf, metadataToBib, parseXmp, japaneseAuthorList } from '../src/pdf';
+import { convertPdf, metadataToBib, parseXmp } from '../src/pdf';
 import { englishXmp, makePdf } from './pdf-fixtures';
 
 test('English PDF Info produces biblatex and at most three authors in the filename', async () => {
@@ -83,4 +84,9 @@ test('PDF import uses metadata only and does not fill a missing year from page t
   expect(converted.entries[0]?.filename).toBe('nd_Smith_Metadata-Title');
   expect(converted.entries[0]?.fields.booktitle).toBeUndefined();
   expect(converted.warnings.join('\n')).not.toContain('1ページ目');
+});
+test('PDF import includes the explicitly selected language', async () => {
+  const converted = await convertPdf(await makePdf({ title: 'A Study', author: 'Jane Smith', year: '2025' }), { language: 'english' });
+  expect(converted.entries[0]?.fields.language).toBe('english');
+  expect(converted.bib).toContain('language = {english}');
 });

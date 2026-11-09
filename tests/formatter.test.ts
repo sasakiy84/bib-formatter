@@ -172,3 +172,20 @@ test('type controls can target the second of multiple entries with empty keys', 
   const converted = changeEntryType('@misc{,title={First}} @misc{,title={Second}}', '', 'book', 1);
   expect(converted.entries.map(entry => entry.type)).toEqual(['misc', 'book']);
 });
+test('Japanese setting adds language and normalizes surname-first Japanese names', () => {
+  const converted = convertBib('@misc{,author={山田 太郎, 鈴木 花子},title={研究},year=2026,language={english}}', { language: 'japanese' });
+  expect(converted.entries[0]?.fields.language).toBe('japanese');
+  expect(converted.entries[0]?.fields.author).toBe('山田, 太郎 and 鈴木, 花子');
+  expect(converted.entries[0]?.key).toBe('山田2026');
+  expect(converted.entries[0]?.filename).toBe('2026_山田-鈴木_研究');
+});
+test('English setting retains English name order and assigns language to every entry', () => {
+  const converted = convertBib('@misc{,author={Jane Smith},title={A Study},year=2024} @book{b,title={Book}}', { language: 'english' });
+  expect(converted.entries.map(entry => entry.fields.language)).toEqual(['english', 'english']);
+  expect(converted.entries[0]?.key).toBe('Smith2024');
+});
+test('other languages can be named explicitly or left unspecified', () => {
+  expect(convertBib('@misc{x,title={Test}}', { language: 'french' }).entries[0]?.fields.language).toBe('french');
+  expect(convertBib('@misc{x,title={Test},language={english}}', { language: '' }).entries[0]?.fields.language).toBe('');
+  expect(() => convertBib('@misc{x,title={Test}}', { language: '{invalid}' })).toThrow('言語名');
+});

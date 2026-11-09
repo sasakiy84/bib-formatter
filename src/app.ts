@@ -18,6 +18,18 @@ const copyNames = element('copy-names', HTMLButtonElement);
 const fieldTools = element('field-tools', HTMLDivElement);
 const entryTools = element('entry-tools', HTMLDivElement);
 const fieldButtons = element('field-buttons', HTMLDivElement);
+const language = element('language', HTMLSelectElement);
+const otherLanguage = element('other-language', HTMLInputElement);
+const otherLanguageLabel = element('other-language-label', HTMLLabelElement);
+function selectedLanguage(): string {
+  return language.value === 'other' ? otherLanguage.value.trim() : language.value;
+}
+language.addEventListener('change', () => {
+  otherLanguageLabel.hidden = language.value !== 'other';
+  sourceChanged();
+});
+otherLanguage.addEventListener('input', sourceChanged);
+
 let result: Conversion | undefined;
 let inputRevision = 0;
 
@@ -146,9 +158,10 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
   invalidate();
   const revision = inputRevision;
   const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+  const inputLanguage = selectedLanguage();
   try {
     if (isPdf) {
-      const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()));
+      const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()), { language: inputLanguage });
       if (revision !== inputRevision) return;
       source.value = conversion.bib;
       displayResult(conversion);
@@ -164,7 +177,7 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
 });
 function convertSource(): void {
   invalidate();
-  try { displayResult(convertBib(source.value)); }
+  try { displayResult(convertBib(source.value, { language: selectedLanguage() })); }
   catch (error) { status.textContent = `変換できませんでした: ${error instanceof Error ? error.message : String(error)}`; }
 }
 element('convert', HTMLButtonElement).addEventListener('click', convertSource);

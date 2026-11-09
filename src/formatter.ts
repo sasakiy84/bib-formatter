@@ -1,3 +1,4 @@
+import { japaneseAuthorList } from './authors';
 import { parse, parseVerbatim, type VerbatimEntry, type Creator } from '@retorquere/bibtex-parser/js';
 
 const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher location institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid crossref xref xdata related relatedtype entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
@@ -63,7 +64,8 @@ export function makeCitationKey(fields: Record<string, string>): string {
   return `${surname}${year}`;
 }
 
-export function convertBib(input: string, { generateKeys = true }: { generateKeys?: boolean } = {}): Conversion {
+export function convertBib(input: string, { generateKeys = true, language }: { generateKeys?: boolean; language?: string } = {}): Conversion {
+  if (language !== undefined && /[{}\\\p{Cc}]/u.test(language)) throw new Error('言語名には波括弧・バックスラッシュ・制御文字を使えません。');
   if (!input.trim()) throw new Error('.bib の内容を入力してください。');
   const library = parseVerbatim(input);
   if (library.errors.length) throw new Error(library.errors.map(error => error.error).join('\n'));
@@ -86,6 +88,10 @@ export function convertBib(input: string, { generateKeys = true }: { generateKey
         }
         fields[target] = value.trim();
       } else removed.push(name);
+    }
+    if (language !== undefined) fields.language = language.trim();
+    if (language === 'japanese' && fields.author) {
+      fields.author = fields.author.split(/\s+and\s+/i).flatMap(japaneseAuthorList).join(' and ');
     }
     if (!fields.date && /^\d{4}$/.test(fields.year ?? '')) {
       const month = fields.month?.padStart(2, '0');
@@ -160,7 +166,7 @@ export function changeEntryType(input: string, key: string, selection: string, e
 }
 
 export const commonFields: readonly (readonly [string, string])[] = [
-  ['title', 'タイトル'], ['author', '著者'], ['date', '出版年月日'], ['journaltitle', '掲載誌'],
+  ['title', 'タイトル'], ['author', '著者'], ['date', '出版年月日'], ['language', '言語'], ['journaltitle', '掲載誌'],
   ['booktitle', '会議名・収録書名'], ['publisher', '出版社'], ['editor', '編者'],
   ['volume', '巻'], ['number', '号'], ['pages', 'ページ'], ['doi', 'DOI'], ['url', 'URL'], ['urldate', 'アクセス日'],
 ];

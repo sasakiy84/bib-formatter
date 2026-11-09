@@ -57,6 +57,15 @@
           <input id="file" type="file" accept=".bib,.bibtex,.pdf,text/plain,application/pdf" aria-label=".bib または PDF ファイルを開く">
           <button id="example" type="button">サンプルを入力</button>
         </div>
+        <div class="toolbar">
+          <label for="language">言語</label>
+          <select id="language">
+            <option value="japanese">日本語</option>
+            <option value="english">英語</option>
+            <option value="other">その他</option>
+          </select>
+          <label id="other-language-label" hidden>言語名 <input id="other-language" type="text" size="12"></label>
+        </div>
         </div>
         <textarea id="source" spellcheck="false" placeholder="@article{key,&#10;  author = {Smith, Jane},&#10;  title = {An Example},&#10;  year = {2024},&#10;}"></textarea>
         <div class="toolbar">

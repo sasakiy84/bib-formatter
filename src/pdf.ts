@@ -1,3 +1,4 @@
+import { japaneseAuthorList } from './authors';
 import { PDFDocument, PDFName, PDFRawStream, PDFDict, PDFString, PDFHexString, decodePDFRawStream } from 'pdf-lib';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { convertBib, type Conversion } from './formatter';
@@ -8,14 +9,6 @@ export interface PdfMetadata {
   publicationDate: string;
   journal: string;
   doi: string;
-}
-
-export function japaneseAuthorList(value: string): string[] {
-  const parts = value.split(/[,、，]\s*/);
-  const japaneseFullName = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々]+[\s　]+[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々]+$/u;
-  if (parts.length > 1 && parts.every(part => japaneseFullName.test(part.trim()))) return parts.map(part => part.trim().replace(/[\s　]+/u, ', '));
-  if (japaneseFullName.test(value.trim())) return [value.trim().replace(/[\s　]+/u, ', ')];
-  return [value];
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -72,7 +65,7 @@ function bibText(value: string): string {
   const escapes: Record<string, string> = { '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', '&': '\\&', '%': '\\%', '$': '\\$', '#': '\\#', '_': '\\_', '~': '\\textasciitilde{}', '^': '\\textasciicircum{}' };
   return value.replace(/[\\{}&%$#_~^]/g, char => escapes[char]!).replace(/[\p{Cc}\p{Cf}]+/gu, ' ').trim();
 }
-export function metadataToBib(metadata: PdfMetadata): Conversion {
+export function metadataToBib(metadata: PdfMetadata, language?: string): Conversion {
   const fields: Record<string, string> = {};
   if (metadata.title) fields.title = bibText(metadata.title);
   if (metadata.authors.length) fields.author = metadata.authors.map(author => {
@@ -85,12 +78,12 @@ export function metadataToBib(metadata: PdfMetadata): Conversion {
   if (metadata.doi) fields.doi = metadata.doi.replace(/[\\{}\p{Cc}]/gu, char => encodeURIComponent(char));
   const type = metadata.journal ? 'article' : 'misc';
   const input = `@${type}{,\n${Object.entries(fields).map(([name, value]) => `  ${name} = {${value}},`).join('\n')}\n}`;
-  const conversion = convertBib(input);
+  const conversion = convertBib(input, { language });
   if (!date) conversion.warnings.push('PDF に出版日がありません。PDF の作成日・更新日を出版年の代わりには使用していません。');
   return conversion;
 }
 
-export async function convertPdf(bytes: Uint8Array): Promise<Conversion> {
+export async function convertPdf(bytes: Uint8Array, { language }: { language?: string } = {}): Promise<Conversion> {
   let document: PDFDocument;
   try { document = await PDFDocument.load(bytes, { updateMetadata: false }); }
   catch (error) {
@@ -132,7 +125,7 @@ export async function convertPdf(bytes: Uint8Array): Promise<Conversion> {
   if (/^(?:LaTeX(?: with hyperref)?|untitled|Microsoft (?:Word|PowerPoint).*)$/i.test(metadata.title)) metadata.title = '';
   metadata.authors = metadata.authors.filter(author => !/^LaTeX(?: with hyperref)?$/i.test(author));
   metadata.authors = metadata.authors.flatMap(japaneseAuthorList);
-  const conversion = metadataToBib(metadata);
+  const conversion = metadataToBib(metadata, language);
   if (xmpWarning) conversion.warnings.push(xmpWarning);
   return conversion;
 }
