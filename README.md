@@ -44,14 +44,14 @@ PDF は埋め込みメタデータだけを読み取ります。1ページ目の
 
 入力側の「言語」で日本語・英語・その他を選べます。変換時に各文献へ `language = {japanese}` または `language = {english}` を設定します。「その他」では言語名を指定でき、未入力なら `language = {}` とします。選択した言語は既存の language より優先します。日本語では「姓 名」の著者表記を「姓, 名」に整え、英語ではBibTeXの人名表記を使います。PDF取り込みにも同じ言語設定を適用します。
 
-- 既存の引用キーと文献順を保持し、種別・標準フィールド名は小文字、値は波括弧、フィールド順は固定にします。LaTeX・数式・大文字保護は保持します。
+- 文献順を保持し、種別・標準フィールド名は小文字、値は波括弧、フィールド順は固定にします。LaTeX・数式・大文字保護は保持します。
 - `journal → journaltitle`、`address → location`、`school → institution`、`archiveprefix → eprinttype`、`primaryclass → eprintclass` を変換します。両方ある場合は biblatex 側を優先し、値の相違を表示します。
 - `conference → inproceedings`、`techreport → report`、`phdthesis / mastersthesis → thesis`、`electronic / www → online` を変換します。学位種別を `type` に残します。
 - 数値の年・月・日は `date` に統合します。既存の `date` を優先します。変換できない年月日は保持して確認を促します。日付の実在性や文献情報の正確さを照合するツールではありません。
 - DOI の URL 接頭辞を取り除き、数値のページ範囲を `--` に統一します。
 - 著者・編者・翻訳者・タイトル・出版情報・識別子・URL・アクセス日・文献間参照など、引用に使うフィールドを許可リストで保持します。保持対象は `src/formatter.ts` の `fieldOrder` と `src/field-actions.ts` の `supportedFields` にあります。`_` で始まる独自フィールドはすべて保持します。
-- `abstract`、`keywords`、`file`、管理ソフトのメタデータなど、許可リストにないフィールドは削除します。
-- 空の引用キーは、変換時に第一著者の姓＋出版年で補完します。著者または年がなければ空欄を保持します。編者を著者の代わりには使いません。同じキーになる文献がある場合も空欄を保持し、重複を表示します。
+- `abstract`、`keywords`、`file`、`note`、管理ソフトのメタデータなど、許可リストにないフィールドは削除します。
+- 引用キーは、既存のものも変換時に第一著者の姓＋出版年に統一します（例: `Linell2019`）。`incollection` だけは開始ページを末尾に追加します（例: `Smith2024p123`）。ページが不明なら付けません。著者または年がなければ既存キーを保持し、元から空欄なら空欄のままにします。変更したキーへの crossref・xref・xdata・related・entryset も追従します。編者を著者の代わりには使いません。同じキーになる文献がある場合も空欄を保持し、重複を表示します。
 - `@string` は展開し、`@preamble` は保持し、コメントは除きます。構文エラーと引用キーの重複は変換を中止します。未知の文献種別は保持して確認を促します。
 - 著者・編者・タイトル・年の欠落、crossref の未解決・循環、ファイル名の重複を表示します。文献種別ごとの追加候補は分類しますが、入力値の妥当性や必須項目の充足を厳密に検証するものではありません。
 
@@ -92,4 +92,4 @@ CHROMIUM_PATH=/usr/bin/chromium bun run test:e2e
 
 種別に合わないという理由だけではフィールドを自動削除しません。「削除」から選んだフィールドだけを削除します。`_` 始まりの独自フィールドと、crossref・xdataなど種別共通のデータモデル上有効なフィールドは不適合にしません。未知の種別ではスタイル固有の規則を決めつけず、削除候補を出しません。任意の追加候補は基本項目と `_tags` / `_notes` に絞ります。編者A/B/C、出版状況、電子版分類などの専門的な追加ボタンは表示しません。既存の有効なフィールドは保持します。
 
-定義は [biblatex公式マニュアルの標準スタイル向け一覧](https://github.com/plk/biblatex/blob/c89dfc81e592de66eac0b9fe84b51eb973d42102/doc/latex/biblatex/biblatex.tex#L482) と同リビジョンの `blx-dm.def` を基に `src/biblatex-fields.json` へ保存しています。必須の分類は追加操作の案内であり、不足していても変換を阻止しません。カスタムスタイルによって必要な項目は異なります。abstract・keywords・file等を除去する既存の方針は維持し、標準スタイルで使う `note` や `addendum` 等の任意フィールドは保持します。
+定義は [biblatex公式マニュアルの標準スタイル向け一覧](https://github.com/plk/biblatex/blob/c89dfc81e592de66eac0b9fe84b51eb973d42102/doc/latex/biblatex/biblatex.tex#L482) と同リビジョンの `blx-dm.def` を基に `src/biblatex-fields.json` へ保存しています。必須の分類は追加操作の案内であり、不足していても変換を阻止しません。カスタムスタイルによって必要な項目は異なります。abstract・keywords・file・note等を除去し、`_notes` は保持します。`addendum` 等の有効な任意フィールドも保持します。

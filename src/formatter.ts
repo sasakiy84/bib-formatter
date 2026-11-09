@@ -53,7 +53,7 @@ export function makeFilename(fields: Record<string, string>): string {
   return filename.replace(/[. ]+$/g, '');
 }
 
-export function makeCitationKey(fields: Record<string, string>): string {
+export function makeCitationKey(fields: Record<string, string>, type = 'misc'): string {
   const year = (fields.date ?? fields.year ?? '').match(/^(\d{4})(?=$|[-/])/)?.[1];
   if (!year || !fields.author?.trim()) return '';
   const firstAuthor = parse(serialize({ type: 'misc', key: 'key', fields: { author: fields.author } }), {
@@ -62,7 +62,37 @@ export function makeCitationKey(fields: Record<string, string>): string {
   if (!firstAuthor) return '';
   const surname = plainText(creatorName(firstAuthor)).replace(/[^\p{L}\p{M}\p{N}-]/gu, '');
   if (!surname || /^(?:others|unknown|anonymous)$/i.test(surname)) return '';
-  return `${surname}${year}`;
+  const firstPage = type.toLowerCase() === 'incollection'
+    ? plainText(fields.pages ?? '').trim().match(/^(?:pp?\.?\s*)?([a-z]*\d+[a-z]*|[ivxlcdm]+)(?=\s*(?:[-–—,;]|$))/i)?.[1]
+    : undefined;
+  return `${surname}${year}${firstPage ? `p${firstPage}` : ''}`;
+}
+
+// Update references together with keys so normalized citations still point at the same entries.
+function normalizeCitationKeys(entries: Pick<VerbatimEntry, 'type' | 'key' | 'fields'>[], warnings: string[], selectedIndex?: number): void {
+  const generated = entries.map((entry, index) => selectedIndex !== undefined && index !== selectedIndex
+    ? '' : makeCitationKey(entry.fields, entry.type));
+  const candidates = entries.map((entry, index) => generated[index] || entry.key);
+  const counts = new Map<string, number>();
+  for (const key of candidates) if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  const renamed = new Map<string, string>();
+  for (const [index, entry] of entries.entries()) {
+    const candidate = candidates[index] ?? '';
+    const key = !generated[index] || counts.get(candidate) === 1 ? candidate : '';
+    if (candidate && !key) warnings.push(`引用キー ${candidate} が重複するため、空欄にしました。`);
+    if (entry.key && entry.key !== key) renamed.set(entry.key, key);
+    entry.key = key;
+  }
+  for (const entry of entries) {
+    for (const field of ['crossref', 'xref', 'xdata', 'related', 'entryset']) {
+      if (!entry.fields[field]) continue;
+      entry.fields[field] = entry.fields[field]!.replace(/[^,\s]+/g, reference => {
+        const replacement = renamed.get(reference);
+        if (replacement === '') warnings.push(`参照先 ${reference} の引用キーを生成できません。参照を確認してください。`);
+        return replacement || reference;
+      });
+    }
+  }
 }
 
 export function convertBib(input: string, { generateKeys = true, language }: { generateKeys?: boolean; language?: string } = {}): Conversion {
@@ -113,17 +143,7 @@ export function convertBib(input: string, { generateKeys = true, language }: { g
     if (!['article', 'book', 'mvbook', 'inbook', 'bookinbook', 'suppbook', 'booklet', 'collection', 'mvcollection', 'incollection', 'suppcollection', 'manual', 'misc', 'online', 'patent', 'periodical', 'suppperiodical', 'proceedings', 'mvproceedings', 'inproceedings', 'reference', 'mvreference', 'inreference', 'report', 'set', 'thesis', 'unpublished', 'xdata', 'software', 'dataset'].includes(type)) warnings.push(`${entry.key}: 未知の文献種別 ${type} を保持しました。`);
     return { key: entry.key, type, fields, filename: '', removed };
   });
-  if (generateKeys) {
-    const candidates = entries.map(entry => entry.key || makeCitationKey(entry.fields));
-    const counts = new Map<string, number>();
-    for (const key of candidates) if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
-    for (const [index, entry] of entries.entries()) {
-      const candidate = candidates[index];
-      if (entry.key || !candidate) continue;
-      if (counts.get(candidate) === 1) entry.key = candidate;
-      else warnings.push(`引用キー ${candidate} が重複するため、空欄のままにしました。`);
-    }
-  }
+  if (generateKeys) normalizeCitationKeys(entries, warnings);
   const byKey = new Map(entries.filter(entry => entry.key).map(entry => [entry.key, entry]));
   for (const entry of entries) {
     const effective = { ...entry.fields };
@@ -162,9 +182,12 @@ export function changeEntryType(input: string, key: string, selection: string, e
   entry.type = ['phdthesis', 'mathesis'].includes(selection) ? 'thesis' : selection;
   if (entry.type === 'thesis' && selection !== 'thesis') entry.fields.type = selection;
   else if (['phdthesis', 'mathesis'].includes(entry.fields.type ?? '')) delete entry.fields.type;
+  const warnings: string[] = [];
+  normalizeCitationKeys(library.entries, warnings, library.entries.indexOf(entry));
   const preambles = library.preambles.map(value => `@preamble{${value}}`);
   const bib = [...preambles, ...library.entries.map(serialize)].join('\n\n') + '\n';
-  return { ...convertBib(bib, { generateKeys: false }), bib };
+  const converted = convertBib(bib, { generateKeys: false });
+  return { ...converted, warnings: [...warnings, ...converted.warnings], bib };
 }
 
 export function addCommonField(input: string, field: string): Conversion {

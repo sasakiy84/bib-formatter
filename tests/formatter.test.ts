@@ -32,11 +32,12 @@ describe('biblatex conversion', () => {
     expect(entry.fields.isbn).toBe('978-0201896831');
   });
   test('retains underscore fields while removing abstracts, keywords and attachments', () => {
-    const entry = first('@misc{x,title={Test},_memo={日本語 {メモ}},_file={paper.pdf},abstract={Long abstract},keywords={tag},file={/secret/local.pdf},note={private}}');
+    const entry = first('@misc{x,title={Test},_memo={日本語 {メモ}},_file={paper.pdf},_notes={Keep this},abstract={Long abstract},keywords={tag},file={/secret/local.pdf},note={private}}');
     expect(entry.fields._memo).toBe('日本語 {メモ}');
     expect(entry.fields._file).toBe('paper.pdf');
-    expect(entry.fields.note).toBe('private');
-    expect(entry.removed).toEqual(['abstract', 'keywords', 'file']);
+    expect(entry.fields.note).toBeUndefined();
+    expect(entry.fields._notes).toBe('Keep this');
+    expect(entry.removed).toEqual(['abstract', 'keywords', 'file', 'note']);
   });
   test('canonical biblatex fields take precedence over conflicting aliases', () => {
     const converted = convertBib('@article{x,journal={Old},journaltitle={New},year=2023,date={2024-05}}');
@@ -150,10 +151,39 @@ test('fills an empty citation key from the first author surname and date year', 
   expect(converted.entries[0]?.key).toBe('山田2026');
   expect(converted.bib).toStartWith('@inproceedings{山田2026,');
 });
-test('generates English surname keys and retains explicit citation keys', () => {
+test('normalizes existing English citation keys to surname and year without article pages', () => {
   expect(makeCitationKey({ author: 'Jane Smith and Jones, Alex', year: '2024' })).toBe('Smith2024');
   expect(makeCitationKey({ author: String.raw`M{\"u}ller, Anna`, date: '2025-04' })).toBe('Müller2025');
-  expect(first('@misc{keep-this-key,author={Smith, Jane},year=2024}').key).toBe('keep-this-key');
+  expect(first('@misc{keep-this-key,author={Smith, Jane},year=2024}').key).toBe('Smith2024');
+  expect(first('@article{LINELL2019101230,author={Linell, Per},year=2019,pages={101230}}').key).toBe('Linell2019');
+  expect(first('@misc{keep-this-key,title={No author or year}}').key).toBe('keep-this-key');
+});
+test('incollection keys append only the starting page when it is available', () => {
+  expect(first('@incollection{old,author={山田, 太郎},date={2026-03},pages={123–145}}').key).toBe('山田2026p123');
+  expect(makeCitationKey({ author: 'Smith, Jane', year: '2024', pages: 'S12--S20' }, 'incollection')).toBe('Smith2024pS12');
+  expect(makeCitationKey({ author: 'Smith, Jane', year: '2024', pages: 'xii--xvi' }, 'incollection')).toBe('Smith2024pxii');
+  expect(first('@incollection{old,author={Smith, Jane},year=2024}').key).toBe('Smith2024');
+  expect(first('@incollection{old,author={Smith, Jane},year=2024,pages={unknown},pagetotal={123}}').key).toBe('Smith2024');
+  expect(first('@inproceedings{old,author={Smith, Jane},year=2024,pages={123-145}}').key).toBe('Smith2024');
+});
+test('renamed keys update single and comma-separated bibliography references', () => {
+  const converted = convertBib('@book{old,author={Smith, Jane},date={2024},title={Book}} @incollection{child,author={Lee, Sam},date={2025},pages={123-140},crossref={old},xref={old},related={old, child},xdata={old},entryset={old, child}}');
+  expect(converted.entries.map(entry => entry.key)).toEqual(['Smith2024', 'Lee2025p123']);
+  expect(converted.entries[1]?.fields.crossref).toBe('Smith2024');
+  expect(converted.entries[1]?.fields.xref).toBe('Smith2024');
+  expect(converted.entries[1]?.fields.related).toBe('Smith2024, Lee2025p123');
+  expect(converted.entries[1]?.fields.xdata).toBe('Smith2024');
+  expect(converted.entries[1]?.fields.entryset).toBe('Smith2024, Lee2025p123');
+  expect(convertBib(converted.bib).bib).toBe(converted.bib);
+});
+test('type changes add and remove an incollection key page suffix', () => {
+  const input = '@article{Smith2024,author={Smith, Jane},date={2024},pages={123--145}} @misc{other,title={Other},crossref={Smith2024}}';
+  const chapter = changeEntryType(input, 'Smith2024', 'incollection');
+  expect(chapter.entries[0]?.key).toBe('Smith2024p123');
+  expect(chapter.entries[1]?.fields.crossref).toBe('Smith2024p123');
+  const article = changeEntryType(chapter.bib, 'Smith2024p123', 'article');
+  expect(article.entries[0]?.key).toBe('Smith2024');
+  expect(article.entries[1]?.fields.crossref).toBe('Smith2024');
 });
 test('leaves keys empty when author or publication year is unavailable', () => {
   const converted = convertBib('@misc{,author={山田, 太郎},title={No year}} @misc{,year=2024,title={No author}} @book{,editor={Smith, Jane},year=2024,title={Editor only}}');
@@ -165,6 +195,10 @@ test('does not generate duplicate keys for the same author and year', () => {
   const converted = convertBib('@misc{,author={Smith, Jane},year=2024,title={A}} @misc{,author={Smith, Jane},year=2024,title={B}}');
   expect(converted.entries.map(entry => entry.key)).toEqual(['', '']);
   expect(converted.warnings.join('\n')).toContain('Smith2024 が重複');
+});
+test('page suffixes distinguish incollection entries by the same author and year', () => {
+  const converted = convertBib('@incollection{oldA,author={Smith, Jane},year=2024,pages={123-145}} @incollection{oldB,author={Smith, Jane},year=2024,pages={146-160}}');
+  expect(converted.entries.map(entry => entry.key)).toEqual(['Smith2024p123', 'Smith2024p146']);
 });
 test('a generated key does not collide with an explicit key', () => {
   const converted = convertBib('@misc{Smith2024,title={Existing}} @misc{,author={Smith, Jane},year=2024}');
