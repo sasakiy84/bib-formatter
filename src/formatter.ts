@@ -169,6 +169,7 @@ export const commonFields: readonly (readonly [string, string])[] = [
   ['title', 'タイトル'], ['author', '著者'], ['date', '出版年月日'], ['language', '言語'], ['journaltitle', '掲載誌'],
   ['booktitle', '会議名・収録書名'], ['publisher', '出版社'], ['editor', '編者'],
   ['volume', '巻'], ['number', '号'], ['pages', 'ページ'], ['doi', 'DOI'], ['url', 'URL'], ['urldate', 'アクセス日'],
+  ['_tags', 'タグ（ユーザー定義）'], ['_notes', 'ノート（ユーザー定義）'],
 ];
 
 export function addCommonField(input: string, field: string): Conversion {
