@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="BibTeX を biblatex に統一し、文献のファイル名も作れます。ブラウザ内で動作する単一HTMLツール。">
+  <title>Bib Formatter</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color-scheme: light dark; accent-color: #397975; }
+    body { max-width: 88rem; margin: auto; padding: clamp(1rem, 3vw, 3rem); line-height: 1.6; }
+    h1 { font-size: 2rem; letter-spacing: -.04em; margin-bottom: .2rem; }
+    h2 { font-size: 1.1rem; margin: 0; }
+    header { margin-bottom: 2rem; }
+    header p { margin-top: 0; }
+    .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-block: .8rem; }
+    button, input { font: inherit; }
+    button { padding: .4rem .85rem; cursor: pointer; }
+    button:disabled { cursor: default; }
+    input[type=file] { max-width: 100%; }
+    .panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+    .pane { min-width: 0; }
+    textarea { display: block; box-sizing: border-box; width: 100%; min-height: 25rem; padding: .85rem; resize: vertical; font: .9rem/1.6 ui-monospace, monospace; tab-size: 2; }
+    .result-head { display: flex; align-items: baseline; gap: 1rem; }
+    #status { min-height: 1.6em; }
+    #warnings { padding: 1rem 1rem 1rem 2.5rem; border: 1px solid GrayText; }
+    #warnings:empty { display: none; }
+    .filename-row { display: flex; gap: .6rem; align-items: center; margin-block: .7rem; }
+    .filename-row label { min-width: 0; flex: 1; font-size: .85rem; overflow-wrap: anywhere; }
+    .filename-row input { display: block; box-sizing: border-box; width: 100%; padding: .55rem; font-family: ui-monospace, monospace; }
+    details { margin-top: 1.5rem; }
+    summary { cursor: pointer; }
+    footer { margin-top: 2rem; font-size: .85rem; color: GrayText; }
+    @media (max-width: 700px) { .panes { grid-template-columns: 1fr; } textarea { min-height: 18rem; } .filename-row { align-items: end; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Bib Formatter</h1>
+    <p>.bib を biblatex に整えて、文献のファイル名もまとめて作成。</p>
+  </header>
+  <main>
+    <div class="panes">
+      <section class="pane" aria-labelledby="input-title">
+        <h2 id="input-title"><label for="source">入力する .bib</label></h2>
+        <div class="toolbar">
+          <input id="file" type="file" accept=".bib,.bibtex,text/plain" aria-label=".bib ファイルを開く">
+          <button id="example" type="button">サンプルを入力</button>
+        </div>
+        <textarea id="source" spellcheck="false" placeholder="@article{key,&#10;  author = {Smith, Jane},&#10;  title = {An Example},&#10;  year = {2024},&#10;}" aria-describedby="privacy"></textarea>
+        <div class="toolbar">
+          <button id="convert" type="button">biblatex に変換</button>
+          <button id="clear" type="button">クリア</button>
+        </div>
+      </section>
+      <section class="pane" aria-labelledby="output-title">
+        <h2 id="output-title"><label for="output">変換した biblatex</label></h2>
+        <div class="toolbar">
+          <button id="copy" type="button" disabled>結果をコピー</button>
+          <button id="download" type="button" disabled>.bib を保存</button>
+        </div>
+        <textarea id="output" readonly spellcheck="false" placeholder="変換結果がここに表示されます。"></textarea>
+      </section>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+    <ul id="warnings" aria-label="確認する項目"></ul>
+    <section aria-labelledby="filenames-title">
+      <div class="result-head"><h2 id="filenames-title">ファイル名</h2><button id="copy-names" disabled>すべてコピー</button></div>
+      <p>Year_Authors_Title ・著者は最大3人、4人以上は et-al ・拡張子なし</p>
+      <div id="filenames"></div>
+    </section>
+    <details>
+      <summary>変換ルール</summary>
+      <p>引用キーと LaTeX の大文字保護・数式を保持し、フィールド名・並び順・波括弧の形式を統一します。journal → journaltitle、address → location、school → institution、year / month → date など、BibTeX の表記を biblatex に寄せます。</p>
+      <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子・文献間の参照と、アンダーバー（_）で始まる独自フィールドを残します。abstract・keywords・file・メモなどは削除し、削除したフィールドを件数とともに表示します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
+      <p>ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは n.d.、著者なしは Unknown と表示します。</p>
+    </details>
+  </main>
+  <footer id="privacy">入力内容はブラウザ内で処理します。サーバーへの送信や入力内容の保存は行いません。HTML を保存すればオフラインでも使えます。</footer>
+  <!-- APP_SCRIPT -->
+</body>
+</html>

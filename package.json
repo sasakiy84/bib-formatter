@@ -1,0 +1,21 @@
+{
+  "name": "bib-formatter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts",
+    "test": "bun test tests/formatter.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "serve": "bun run serve.ts"
+  },
+  "dependencies": {
+    "@retorquere/bibtex-parser": "^13.0.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
+  },
+  "packageManager": "bun@1.4.4"
+}

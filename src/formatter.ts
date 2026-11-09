@@ -1,0 +1,123 @@
+import { parse, parseVerbatim, type VerbatimEntry, type Creator } from '@retorquere/bibtex-parser/js';
+
+const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher location institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid crossref xref xdata related relatedtype entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
+const retained = new Set(fieldOrder);
+const typeAliases: Record<string, string> = { conference: 'inproceedings', techreport: 'report', phdthesis: 'thesis', mastersthesis: 'thesis', electronic: 'online', www: 'online' };
+const fieldAliases: Record<string, string> = { journal: 'journaltitle', address: 'location', school: 'institution', archiveprefix: 'eprinttype', primaryclass: 'eprintclass' };
+
+export interface FormattedEntry {
+  key: string;
+  type: string;
+  fields: Record<string, string>;
+  filename: string;
+  removed: string[];
+}
+export interface Conversion { bib: string; entries: FormattedEntry[]; warnings: string[] }
+
+function serialize(entry: Pick<VerbatimEntry, 'type' | 'key' | 'fields'>): string {
+  const names = Object.keys(entry.fields).sort((a, b) => {
+    const ai = fieldOrder.indexOf(a), bi = fieldOrder.indexOf(b);
+    return (ai < 0 ? fieldOrder.length : ai) - (bi < 0 ? fieldOrder.length : bi) || a.localeCompare(b, 'en');
+  });
+  return `@${entry.type}{${entry.key},\n${names.map(name => `  ${name} = {${entry.fields[name]}},`).join('\n')}\n}`;
+}
+
+// Filename-only cleanup; the bibliography retains original LaTeX and case-protection braces.
+function plainText(value: string): string {
+  return value.replace(/<[^>]*>/g, '').replace(/&(?:amp|lt|gt|quot|apos|#39);/g, entity => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&#39;': "'" })[entity] ?? entity)
+    .replace(/\\[a-zA-Z]+\s*/g, '').replace(/[{}]/g, '').normalize('NFC');
+}
+function filenamePart(value: string): string {
+  return plainText(value).replace(/[<>:"/\\|?*\p{Cc}\p{Cf}]/gu, ' ').replace(/[\s_]+/g, ' ').trim().replace(/[. ]+$/g, '').replace(/ /g, '-');
+}
+function creatorName(creator: Creator): string {
+  return creator.name ?? [creator.prefix, creator.lastName].filter(Boolean).join(' ');
+}
+
+export function makeFilename(fields: Record<string, string>): string {
+  const selected = Object.fromEntries(['author', 'editor', 'title'].filter(name => fields[name]).map(name => [name, fields[name]!]));
+  const normalized = parse(serialize({ type: 'misc', key: 'filename', fields: selected }), {
+    sentenceCase: false, caseProtection: false, fieldMode: { title: 'richtext' },
+  }).entries[0]?.fields;
+  const creators = normalized?.author ?? normalized?.editor ?? [];
+  const authors = creators.slice(0, 3).map(creatorName).join('-') + (creators.length > 3 ? '-et-al' : '');
+  const date = fields.date ?? fields.year ?? '';
+  const year = date.match(/^-?\d{4}/)?.[0] ?? 'n.d.';
+  const title = typeof normalized?.title === 'string' ? normalized.title : fields.title ?? 'Untitled';
+  const parts = [year === 'n.d.' ? year : filenamePart(year), filenamePart(authors) || 'Unknown', filenamePart(title) || 'Untitled'];
+  // Keep the UTF-8 basename below common 255-byte limits, including room for a .pdf extension.
+  let filename = parts.join('_');
+  while (new TextEncoder().encode(filename).length > 240) filename = Array.from(filename).slice(0, -1).join('');
+  return filename.replace(/[. ]+$/g, '');
+}
+
+export function convertBib(input: string): Conversion {
+  if (!input.trim()) throw new Error('.bib の内容を入力してください。');
+  const library = parseVerbatim(input);
+  if (library.errors.length) throw new Error(library.errors.map(error => error.error).join('\n'));
+  if (!library.entries.length) throw new Error('文献エントリが見つかりません。');
+  const warnings: string[] = [];
+  const keys = new Set<string>();
+  const entries: FormattedEntry[] = library.entries.map(entry => {
+    if (!entry.key || /[\s,{}]/u.test(entry.key)) throw new Error(`引用キーが不正です: ${entry.key}`);
+    if (keys.has(entry.key)) throw new Error(`引用キーが重複しています: ${entry.key}`);
+    keys.add(entry.key);
+    const source = Object.fromEntries(Object.entries(entry.fields).map(([name, value]) => [name.toLowerCase(), value]));
+    const fields: Record<string, string> = Object.create(null);
+    const removed: string[] = [];
+    for (const [name, value] of Object.entries(source)) {
+      const target = fieldAliases[name] ?? name;
+      if (target.startsWith('_') || retained.has(target)) {
+        if (target !== name && source[target] !== undefined) {
+          if (source[target] !== value) warnings.push(`${entry.key}: ${name} と ${target} が異なるため ${target} を優先しました。`);
+          continue;
+        }
+        fields[target] = value.trim();
+      } else removed.push(name);
+    }
+    if (!fields.date && /^\d{4}$/.test(fields.year ?? '')) {
+      const month = fields.month?.padStart(2, '0');
+      const day = fields.day?.padStart(2, '0');
+      if ((!month && !day) || (month && /^(0[1-9]|1[0-2])$/.test(month) && (!day || /^(0[1-9]|[12]\d|3[01])$/.test(day)))) {
+        fields.date = [fields.year, month, day].filter(Boolean).join('-');
+        delete fields.year; delete fields.month; delete fields.day;
+      } else warnings.push(`${entry.key}: 年月日を確認してください。元の year/month/day を保持しました。`);
+    } else if (fields.date) {
+      if (fields.year && !fields.date.startsWith(fields.year)) warnings.push(`${entry.key}: date と year が異なるため date を優先しました。`);
+      delete fields.year; delete fields.month; delete fields.day;
+    }
+    if (fields.doi) fields.doi = fields.doi.replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)/i, '').trim();
+    if (fields.pages) fields.pages = fields.pages.replace(/(\d)\s*[-–—]+\s*(?=\d)/g, '$1--');
+    const type = typeAliases[entry.type.toLowerCase()] ?? entry.type.toLowerCase();
+    if (entry.type.toLowerCase() === 'phdthesis' && !fields.type) fields.type = 'phdthesis';
+    if (entry.type.toLowerCase() === 'mastersthesis' && !fields.type) fields.type = 'mathesis';
+    if (!['article', 'book', 'mvbook', 'inbook', 'bookinbook', 'suppbook', 'booklet', 'collection', 'mvcollection', 'incollection', 'suppcollection', 'manual', 'misc', 'online', 'patent', 'periodical', 'suppperiodical', 'proceedings', 'mvproceedings', 'inproceedings', 'reference', 'mvreference', 'inreference', 'report', 'set', 'thesis', 'unpublished', 'xdata', 'software', 'dataset'].includes(type)) warnings.push(`${entry.key}: 未知の文献種別 ${type} を保持しました。`);
+    return { key: entry.key, type, fields, filename: '', removed };
+  });
+  const byKey = new Map(entries.map(entry => [entry.key, entry]));
+  for (const entry of entries) {
+    const effective = { ...entry.fields };
+    // Resolve common crossref metadata for filenames without changing biblatex inheritance.
+    const seen = new Set([entry.key]);
+    let parentKey = effective.crossref ?? effective.xref;
+    while (parentKey) {
+      if (seen.has(parentKey)) { warnings.push(`${entry.key}: crossref が循環しています。`); break; }
+      seen.add(parentKey);
+      const parent = byKey.get(parentKey);
+      if (!parent) { warnings.push(`${entry.key}: 参照先 ${parentKey} が入力にありません。`); break; }
+      for (const name of ['author', 'editor', 'date', 'year']) if (!effective[name] && parent.fields[name]) effective[name] = parent.fields[name];
+      parentKey = parent.fields.crossref ?? parent.fields.xref;
+    }
+    entry.filename = makeFilename(effective);
+    if (!effective.title && entry.type !== 'xdata') warnings.push(`${entry.key}: title がありません。`);
+    if (!effective.author && !effective.editor && entry.type !== 'xdata') warnings.push(`${entry.key}: author / editor がありません。`);
+    if (!effective.date && !effective.year && entry.type !== 'xdata') warnings.push(`${entry.key}: 出版年がありません。`);
+  }
+  const filenames = new Set<string>();
+  for (const entry of entries) {
+    if (filenames.has(entry.filename)) warnings.push(`${entry.key}: ファイル名が重複しています。保存時に区別してください。`);
+    filenames.add(entry.filename);
+  }
+  const preambles = library.preambles.map(value => `@preamble{${value}}`);
+  return { bib: [...preambles, ...entries.map(serialize)].join('\n\n') + '\n', entries, warnings };
+}
