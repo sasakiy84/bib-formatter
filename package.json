@@ -4,13 +4,15 @@
   "type": "module",
   "scripts": {
     "build": "bun run build.ts",
-    "test": "bun test tests/formatter.test.ts",
+    "test": "bun test tests/formatter.test.ts tests/pdf.test.ts",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "serve": "bun run serve.ts"
   },
   "dependencies": {
-    "@retorquere/bibtex-parser": "^13.0.15"
+    "@retorquere/bibtex-parser": "^13.0.15",
+    "fast-xml-parser": "^5.12.0",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
