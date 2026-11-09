@@ -6,7 +6,7 @@
 
 ## 結論
 
-最初の比較実験には **Qwen3.5-0.8B と 2B** を推す。ページ画像から直接 JSON を生成する方式と、PDF から抽出したテキストを JSON に構造化する方式を、同じモデル系列で比較できる。ONNX 版と Transformers.js / WebGPU の利用例があり、ブラウザへの実装経路が具体的である。日本語の人名や小さい脚注を正しく読めるかは実測が必要で、0.8B で十分とは判断しない。
+複数のブラウザを対象にする最初の比較実験には **Qwen3.5-0.8B と 2B** を推す。ページ画像から直接 JSON を生成する方式と、PDF から抽出したテキストを JSON に構造化する方式を、同じモデル系列で比較できる。ONNX 版と Transformers.js / WebGPU の利用例があり、ブラウザへの実装経路が具体的である。日本語の人名や小さい脚注を正しく読めるかは実測が必要で、0.8B で十分とは判断しない。
 
 軽量さを優先する比較対象は **Granite Docling 258M**。ただし公式に日本語対応は experimental とされており、日本語の主力として即採用しない。日本語OCRを重視する比較対象は **GLM-OCR**。抽出タスク自体への適合度を重視する比較対象は **NuExtract 2.0 2B / NuExtract3** だが、ブラウザへの移植・変換の作業量が増える。
 
@@ -36,6 +36,14 @@
 - GLM-OCR: `aea46198f09e3aa2b63422dd234f1cc66afffe52`、652,710,345 bytes。
 - Qwen3-0.6B: `58ca03a5e7b354b480b1a82b34bde8dc7b854cc0`、569,789,750 bytes。
 
+## Chrome限定を許容する場合
+
+Chrome の **Prompt API（ブラウザ内蔵モデル）** も有力な別案である。公式ドキュメントでは日本語・英語を含む言語の指定、画像入力、JSON Schemaを使う出力制約が説明されている。モデルの配布と更新をブラウザに任せられるため、アプリ側でONNXファイルをホスティング・変換する必要がない。
+
+一方、一般のWebブラウザで共通に使えるAPIではなく、端末要件が強い。公式にモバイルは非対応、Chromeプロファイルのあるボリュームに空き22GB以上、GPUならVRAMが4GB超、CPUならRAM16GB以上と4コア以上等が必要とされる。**22GBは必要な空き容量で、モデルのダウンロードサイズではない。** ブラウザがモデルを更新するため、モデル版をアプリ側で固定する方式とも条件が異なる。
+
+Chromeの対応PCだけでよければ、これをQwen系と並べて小さなPoCで比較する価値がある。APIの存在判定だけで対応済みとせず、日本語と画像を含む条件で `LanguageModel.availability()` を確認する。実際のPDFでの書誌抽出精度と処理速度は未測定である。
+
 ## 他に調べた選択肢
 
 | 選択肢 | 使い方と評価 |
@@ -62,7 +70,7 @@
 
 ## 比較実験の案
 
-これは未実施の提案である。
+これは未実施の提案である。Chrome限定を許容する場合は、内蔵Prompt APIも同一の評価セットで比較する。
 
 1. **Qwen3.5-0.8B と 2B** で、同じ1ページ目画像を入力する。タイトル・全著者・出版年月・会議名・文献種別を固定スキーマのJSONで取得する。最初は短い非推論モード・greedy生成を使い、生成時間と出力長を制限する。
 2. **文字が正常に取り出せるPDF** では、同じQwen系に抽出テキストを渡す方式と比較する。フォントサイズ等の手作業ルールで書誌項目を決める処理は戻さない。文字列に座標・改行情報を付けるかも比較する。
@@ -104,6 +112,8 @@
 - WebLLM / JSON・キャッシュ・Worker: https://github.com/mlc-ai/web-llm
 - WebLLM 登録モデル・VRAM目安: https://github.com/mlc-ai/web-llm/blob/main/src/config.ts
 - ONNX Runtime Web / 大規模モデルの制約: https://onnxruntime.ai/docs/tutorials/web/large-models.html
+- Chrome Prompt API: https://developer.chrome.com/docs/ai/prompt-api
+- Chrome 内蔵AIの言語・端末要件: https://developer.chrome.com/docs/ai/get-started
 - MediaPipe Web: https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/web_js
 
 モデルの重みはダウンロード・実行していない。実施したのは一次資料、モデルAPIのファイルサイズ、配布形式、公開JavaScriptランタイムの対応コードの確認である。ブラウザでのモデル精度・推論速度・実使用メモリは未測定。
