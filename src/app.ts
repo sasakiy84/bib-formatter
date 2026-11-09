@@ -19,7 +19,8 @@ const copyNames = element('copy-names', HTMLButtonElement);
 const fieldTools = element('field-tools', HTMLDivElement);
 const entryTools = element('entry-tools', HTMLDivElement);
 const fieldButtons = element('field-buttons', HTMLDivElement);
-const language = element('language', HTMLSelectElement);
+let inputLanguage = 'japanese';
+const languageButtons = ['japanese', 'english', 'other'].map(value => ({ value, button: element(`language-${value}`, HTMLButtonElement) }));
 const otherLanguage = element('other-language', HTMLInputElement);
 const otherLanguageLabel = element('other-language-label', HTMLLabelElement);
 const tabs = [element('converter-tab', HTMLButtonElement), element('prompt-tab', HTMLButtonElement)];
@@ -50,11 +51,16 @@ const llmPrompt = element('llm-prompt', HTMLTextAreaElement);
 const promptStatus = element('prompt-status', HTMLParagraphElement);
 element('copy-prompt', HTMLButtonElement).addEventListener('click', () => void copyText(llmPrompt.value, llmPrompt, promptStatus));
 function selectedLanguage(): string {
-  return language.value === 'other' ? otherLanguage.value.trim() : language.value;
+  return inputLanguage === 'other' ? otherLanguage.value.trim() : inputLanguage;
 }
-language.addEventListener('change', () => {
-  otherLanguageLabel.hidden = language.value !== 'other';
-  sourceChanged();
+languageButtons.forEach(({ value, button }) => {
+  button.addEventListener('click', () => {
+    if (inputLanguage === value) return;
+    inputLanguage = value;
+    languageButtons.forEach(choice => choice.button.setAttribute('aria-pressed', String(choice.value === value)));
+    otherLanguageLabel.hidden = value !== 'other';
+    sourceChanged();
+  });
 });
 otherLanguage.addEventListener('input', sourceChanged);
 

@@ -22,7 +22,9 @@
     .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-block: .8rem; }
     button, input, select { font: inherit; }
     select { max-width: 100%; padding: .4rem; }
-    #language, #other-language { box-sizing: border-box; height: 2.75rem; }
+    .language-buttons { display: inline-flex; gap: .4rem; }
+    .language-buttons button, #other-language { box-sizing: border-box; height: 2.75rem; }
+    .language-buttons button[aria-pressed=true] { font-weight: bold; outline: 2px solid currentColor; outline-offset: -3px; }
     .filename-entry { padding-block: .5rem; }
     .filename-entry > label { display: block; font-size: .85rem; overflow-wrap: anywhere; }
     #entry-tools .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
@@ -77,12 +79,12 @@
           <button id="example" type="button">サンプルを入力</button>
         </div>
         <div class="toolbar">
-          <label for="language">言語</label>
-          <select id="language">
-            <option value="japanese">日本語</option>
-            <option value="english">英語</option>
-            <option value="other">その他</option>
-          </select>
+          <span id="language-label">言語</span>
+          <div class="language-buttons" role="group" aria-labelledby="language-label">
+            <button id="language-japanese" type="button" aria-pressed="true">日本語</button>
+            <button id="language-english" type="button" aria-pressed="false">英語</button>
+            <button id="language-other" type="button" aria-pressed="false">その他</button>
+          </div>
           <label id="other-language-label" hidden>言語名 <input id="other-language" type="text" size="12"></label>
         </div>
         </div>
