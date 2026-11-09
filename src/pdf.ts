@@ -84,7 +84,7 @@ export function metadataToBib(metadata: PdfMetadata): Conversion {
   if (metadata.journal) fields.journaltitle = bibText(metadata.journal);
   if (metadata.doi) fields.doi = metadata.doi.replace(/[\\{}\p{Cc}]/gu, char => encodeURIComponent(char));
   const type = metadata.journal ? 'article' : 'misc';
-  const input = `@${type}{pdf-import,\n${Object.entries(fields).map(([name, value]) => `  ${name} = {${value}},`).join('\n')}\n}`;
+  const input = `@${type}{,\n${Object.entries(fields).map(([name, value]) => `  ${name} = {${value}},`).join('\n')}\n}`;
   const conversion = convertBib(input);
   if (!date) conversion.warnings.push('PDF に出版日がありません。PDF の作成日・更新日を出版年の代わりには使用していません。');
   return conversion;

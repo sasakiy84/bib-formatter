@@ -6,6 +6,7 @@ import { englishXmp, makePdf } from './pdf-fixtures';
 test('English PDF Info produces biblatex and at most three authors in the filename', async () => {
   const conversion = await convertPdf(await makePdf({ title: 'An English Title', author: 'Smith, Jane; Jones, Alex; Lee, Sam; Brown, Chris', year: '2024' }));
   expect(conversion.entries[0]?.filename).toBe('2024_Smith-Jones-Lee-et-al_An-English-Title');
+  expect(conversion.entries[0]?.key).toBe('Smith2024');
   expect(conversion.entries[0]?.fields.author).toBe('Smith, Jane and Jones, Alex and Lee, Sam and Brown, Chris');
   expect(conversion.entries[0]?.type).toBe('misc');
 });
@@ -37,6 +38,7 @@ test('PDF creation year is not substituted for publication year', async () => {
   const conversion = await convertPdf(await makePdf({ title: 'Undated Paper', author: 'Smith, Jane' }));
   expect(conversion.entries[0]?.fields.date).toBeUndefined();
   expect(conversion.entries[0]?.filename).toBe('nd_Smith_Undated-Paper');
+  expect(conversion.entries[0]?.key).toBe('');
   expect(conversion.warnings.join('\n')).toContain('出版日がありません');
 });
 test('PDF without metadata exports an editable placeholder and missing-field warnings', async () => {

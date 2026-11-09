@@ -70,10 +70,10 @@ for (const width of [1280, 390]) {
     page.on('pageerror', error => errors.push(error.message));
     await page.goto('/');
     await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'paper.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ xmp: englishXmp })) });
-    await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
+    await expect(page.getByLabel('Smith2024', { exact: true })).toHaveValue('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
     await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/journaltitle = \{Journal of Examples\}/);
-    await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
-    await page.getByRole('button', { name: 'pdf-import のファイル名をコピー', exact: true }).click();
+    await expect(page.getByLabel('Smith2024', { exact: true })).toHaveValue('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
+    await page.getByRole('button', { name: 'Smith2024 のファイル名をコピー', exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: '.bib を保存' }).click();
@@ -87,12 +87,12 @@ test('PDF without publication date shows missing information and allows correcti
   const { makePdf } = await import('../pdf-fixtures');
   await page.goto('/');
   await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: '日本語.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ title: '日本語の研究', author: '佐藤, 花子' })) });
-  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('nd_佐藤_日本語の研究');
+  await expect(page.getByLabel('キーなし', { exact: true })).toHaveValue('nd_佐藤_日本語の研究');
   await expect(page.getByLabel('確認する項目')).toContainText('PDF に出版日がありません');
   const source = page.getByRole('textbox', { name: '入力する .bib' });
-  await source.fill((await source.inputValue()).replace('@misc{pdf-import,', '@misc{pdf-import,\n  date = {2025},'));
+  await source.fill((await source.inputValue()).replace('@misc{,', '@misc{,\n  date = {2025},'));
   await page.getByRole('button', { name: 'biblatex に変換' }).click();
-  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2025_佐藤_日本語の研究');
+  await expect(page.getByLabel('佐藤2025', { exact: true })).toHaveValue('2025_佐藤_日本語の研究');
 });
 test('corrupt PDF clears old results and shows an error', async ({ page }) => {
   await page.goto('/');
@@ -110,7 +110,7 @@ test('PDF conversion works in the standalone offline HTML', async ({ page, conte
   await context.setOffline(true);
   await page.goto(new URL('../../dist/index.html', import.meta.url).href);
   await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'offline.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ title: 'Offline Study', author: 'Smith, Jane', year: '2024' })) });
-  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2024_Smith_Offline-Study');
+  await expect(page.getByLabel('Smith2024', { exact: true })).toHaveValue('2024_Smith_Offline-Study');
   expect(requests).toHaveLength(1);
 });
 test('Japanese type controls update the selected bibliography entry', async ({ page }) => {
@@ -232,6 +232,21 @@ test('PDF import reads metadata without inferring missing fields from the first 
     { text: 'Example Conference (2025)', x: 80, y: 810, size: 10 },
     { text: 'A Different Paper Title', x: 80, y: 740, size: 18 },
   ] })) });
-  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('nd_Smith_Known-Title');
-  await expect(page.getByRole('combobox', { name: 'pdf-import の文献種別' })).toHaveValue('misc');
+  await expect(page.getByLabel('キーなし', { exact: true })).toHaveValue('nd_Smith_Known-Title');
+  await expect(page.getByRole('combobox', { name: 'キーなし の文献種別' })).toHaveValue('misc');
+});
+test('converts an empty key to the first author surname and year', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '入力する .bib' }).fill('@inproceedings{, author={山田, 太郎 and 鈴木, 花子}, title={架空の研究}, date={2026-03}}');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/^@inproceedings\{山田2026,/);
+  await expect(page.getByLabel('山田2026', { exact: true })).toHaveValue('2026_山田-鈴木_架空の研究');
+});
+test('unnamed entries keep empty keys and support separate type edits', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '入力する .bib' }).fill('@misc{,title={First}} @misc{,title={Second}}');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  await page.getByRole('combobox', { name: 'キーなし（文献2） の文献種別' }).selectOption('book');
+  await page.getByRole('button', { name: 'キーなし（文献2） の種別を変更', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/@misc\{,[\s\S]*@book\{,/);
 });

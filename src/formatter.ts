@@ -51,7 +51,19 @@ export function makeFilename(fields: Record<string, string>): string {
   return filename.replace(/[. ]+$/g, '');
 }
 
-export function convertBib(input: string): Conversion {
+export function makeCitationKey(fields: Record<string, string>): string {
+  const year = (fields.date ?? fields.year ?? '').match(/^(\d{4})(?=$|[-/])/)?.[1];
+  if (!year || !fields.author?.trim()) return '';
+  const firstAuthor = parse(serialize({ type: 'misc', key: 'key', fields: { author: fields.author } }), {
+    sentenceCase: false, caseProtection: false,
+  }).entries[0]?.fields.author?.[0];
+  if (!firstAuthor) return '';
+  const surname = plainText(creatorName(firstAuthor)).replace(/[^\p{L}\p{M}\p{N}-]/gu, '');
+  if (!surname || /^(?:others|unknown|anonymous)$/i.test(surname)) return '';
+  return `${surname}${year}`;
+}
+
+export function convertBib(input: string, { generateKeys = true }: { generateKeys?: boolean } = {}): Conversion {
   if (!input.trim()) throw new Error('.bib の内容を入力してください。');
   const library = parseVerbatim(input);
   if (library.errors.length) throw new Error(library.errors.map(error => error.error).join('\n'));
@@ -59,9 +71,9 @@ export function convertBib(input: string): Conversion {
   const warnings: string[] = [];
   const keys = new Set<string>();
   const entries: FormattedEntry[] = library.entries.map(entry => {
-    if (!entry.key || /[\s,{}]/u.test(entry.key)) throw new Error(`引用キーが不正です: ${entry.key}`);
-    if (keys.has(entry.key)) throw new Error(`引用キーが重複しています: ${entry.key}`);
-    keys.add(entry.key);
+    if (/[\s,{}]/u.test(entry.key)) throw new Error(`引用キーが不正です: ${entry.key}`);
+    if (entry.key && keys.has(entry.key)) throw new Error(`引用キーが重複しています: ${entry.key}`);
+    if (entry.key) keys.add(entry.key);
     const source = Object.fromEntries(Object.entries(entry.fields).map(([name, value]) => [name.toLowerCase(), value]));
     const fields: Record<string, string> = Object.create(null);
     const removed: string[] = [];
@@ -94,7 +106,18 @@ export function convertBib(input: string): Conversion {
     if (!['article', 'book', 'mvbook', 'inbook', 'bookinbook', 'suppbook', 'booklet', 'collection', 'mvcollection', 'incollection', 'suppcollection', 'manual', 'misc', 'online', 'patent', 'periodical', 'suppperiodical', 'proceedings', 'mvproceedings', 'inproceedings', 'reference', 'mvreference', 'inreference', 'report', 'set', 'thesis', 'unpublished', 'xdata', 'software', 'dataset'].includes(type)) warnings.push(`${entry.key}: 未知の文献種別 ${type} を保持しました。`);
     return { key: entry.key, type, fields, filename: '', removed };
   });
-  const byKey = new Map(entries.map(entry => [entry.key, entry]));
+  if (generateKeys) {
+    const candidates = entries.map(entry => entry.key || makeCitationKey(entry.fields));
+    const counts = new Map<string, number>();
+    for (const key of candidates) if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    for (const [index, entry] of entries.entries()) {
+      const candidate = candidates[index];
+      if (entry.key || !candidate) continue;
+      if (counts.get(candidate) === 1) entry.key = candidate;
+      else warnings.push(`引用キー ${candidate} が重複するため、空欄のままにしました。`);
+    }
+  }
+  const byKey = new Map(entries.filter(entry => entry.key).map(entry => [entry.key, entry]));
   for (const entry of entries) {
     const effective = { ...entry.fields };
     // Resolve common crossref metadata for filenames without changing biblatex inheritance.
@@ -122,12 +145,12 @@ export function convertBib(input: string): Conversion {
   return { bib: [...preambles, ...entries.map(serialize)].join('\n\n') + '\n', entries, warnings };
 }
 
-export function changeEntryType(input: string, key: string, selection: string): Conversion {
+export function changeEntryType(input: string, key: string, selection: string, entryIndex?: number): Conversion {
   const supported = new Set(['article', 'inproceedings', 'book', 'incollection', 'thesis', 'phdthesis', 'mathesis', 'report', 'online', 'unpublished', 'misc']);
   if (!supported.has(selection)) throw new Error('変更先の文献種別を選択してください。');
   const library = parseVerbatim(input);
   if (library.errors.length) throw new Error('bib を読み込めません。');
-  const entry = library.entries.find(entry => entry.key === key);
+  const entry = entryIndex === undefined ? library.entries.find(entry => entry.key === key) : library.entries[entryIndex];
   if (!entry) throw new Error('変更する文献が見つかりません。');
   entry.type = ['phdthesis', 'mathesis'].includes(selection) ? 'thesis' : selection;
   if (entry.type === 'thesis' && selection !== 'thesis') entry.fields.type = selection;

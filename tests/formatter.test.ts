@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { addCommonField, changeEntryType, convertBib, makeFilename } from '../src/formatter';
+import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename } from '../src/formatter';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
@@ -141,4 +141,34 @@ test('adds an empty common field without changing existing bibliography values',
 test('does not add duplicate fields or add fields to multiple entries', () => {
   expect(() => addCommonField('@misc{x,doi={10.1234/example}}', 'doi')).toThrow('追加済み');
   expect(() => addCommonField('@misc{x,title={X}} @misc{y,title={Y}}', 'doi')).toThrow('1件');
+});
+
+test('fills an empty citation key from the first author surname and date year', () => {
+  const converted = convertBib('@inproceedings{,author={山田, 太郎 and 鈴木, 花子},title={架空の研究},date={2026-03}}');
+  expect(converted.entries[0]?.key).toBe('山田2026');
+  expect(converted.bib).toStartWith('@inproceedings{山田2026,');
+});
+test('generates English surname keys and retains explicit citation keys', () => {
+  expect(makeCitationKey({ author: 'Jane Smith and Jones, Alex', year: '2024' })).toBe('Smith2024');
+  expect(makeCitationKey({ author: String.raw`M{\"u}ller, Anna`, date: '2025-04' })).toBe('Müller2025');
+  expect(first('@misc{keep-this-key,author={Smith, Jane},year=2024}').key).toBe('keep-this-key');
+});
+test('leaves keys empty when author or publication year is unavailable', () => {
+  const converted = convertBib('@misc{,author={山田, 太郎},title={No year}} @misc{,year=2024,title={No author}} @book{,editor={Smith, Jane},year=2024,title={Editor only}}');
+  expect(converted.entries.map(entry => entry.key)).toEqual(['', '', '']);
+  expect(converted.bib).toContain('@misc{,');
+  expect(converted.entries[0]?.filename).toBe('nd_山田_No-year');
+});
+test('does not generate duplicate keys for the same author and year', () => {
+  const converted = convertBib('@misc{,author={Smith, Jane},year=2024,title={A}} @misc{,author={Smith, Jane},year=2024,title={B}}');
+  expect(converted.entries.map(entry => entry.key)).toEqual(['', '']);
+  expect(converted.warnings.join('\n')).toContain('Smith2024 が重複');
+});
+test('a generated key does not collide with an explicit key', () => {
+  const converted = convertBib('@misc{Smith2024,title={Existing}} @misc{,author={Smith, Jane},year=2024}');
+  expect(converted.entries.map(entry => entry.key)).toEqual(['Smith2024', '']);
+});
+test('type controls can target the second of multiple entries with empty keys', () => {
+  const converted = changeEntryType('@misc{,title={First}} @misc{,title={Second}}', '', 'book', 1);
+  expect(converted.entries.map(entry => entry.type)).toEqual(['misc', 'book']);
 });

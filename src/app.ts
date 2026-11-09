@@ -60,7 +60,7 @@ output.addEventListener('input', () => {
   invalidate(true);
   if (!text.trim()) return;
   try {
-    const updated = convertBib(text);
+    const updated = convertBib(text, { generateKeys: false });
     displayResult({ ...updated, bib: text }, false);
 
   } catch (error) { status.textContent = `編集中: ${error instanceof Error ? error.message : String(error)}`; }
@@ -98,38 +98,39 @@ function displayResult(conversion: Conversion, writeOutput = true): void {
   status.textContent = '';
   const messages = result.warnings;
   for (const message of messages) { const li = document.createElement('li'); li.textContent = message; warnings.append(li); }
-  for (const entry of result.entries) {
+  for (const [entryIndex, entry] of result.entries.entries()) {
+    const displayKey = entry.key || (result.entries.length === 1 ? 'キーなし' : `キーなし（文献${entryIndex + 1}）`);
     const controls = document.createElement('div'); controls.className = 'toolbar';
-    const typeLabel = document.createElement('label'); typeLabel.textContent = result.entries.length === 1 ? '文献種別 ' : `${entry.key} の文献種別 `;
-    const typeSelect = document.createElement('select'); typeSelect.setAttribute('aria-label', `${entry.key} の文献種別`); typeSelect.dataset.entryKey = entry.key;
+    const typeLabel = document.createElement('label'); typeLabel.textContent = result.entries.length === 1 ? '文献種別 ' : `${displayKey} の文献種別 `;
+    const typeSelect = document.createElement('select'); typeSelect.setAttribute('aria-label', `${displayKey} の文献種別`); typeSelect.dataset.entryIndex = String(entryIndex);
     const choices: [string, string][] = [['article', '雑誌論文'], ['inproceedings', '会議論文'], ['book', '書籍'], ['incollection', '書籍の章'], ['phdthesis', '博士論文'], ['mathesis', '修士論文'], ['thesis', 'その他の学位論文'], ['report', '報告書'], ['online', 'Webページ'], ['unpublished', '未刊行資料'], ['misc', 'その他・未分類']];
     const selected = entry.type === 'thesis' && ['phdthesis', 'mathesis'].includes(entry.fields.type ?? '') ? entry.fields.type! : entry.type;
     if (!choices.some(([type]) => type === selected)) choices.push([selected, `その他の種別（${selected}）`]);
     for (const [value, text] of choices) { const option = document.createElement('option'); option.value = value; option.textContent = text; typeSelect.append(option); }
     typeSelect.value = selected;
     typeLabel.append(typeSelect);
-    const changeType = document.createElement('button'); changeType.textContent = '種別を変更'; changeType.setAttribute('aria-label', `${entry.key} の種別を変更`);
+    const changeType = document.createElement('button'); changeType.textContent = '種別を変更'; changeType.setAttribute('aria-label', `${displayKey} の種別を変更`);
     changeType.addEventListener('click', () => {
       if (!result) return;
       try {
-        const updated = changeEntryType(result.bib, entry.key, typeSelect.value);
+        const updated = changeEntryType(result.bib, entry.key, typeSelect.value, entryIndex);
         updated.warnings = [...new Set([...result.warnings, ...updated.warnings])];
-        for (const changed of updated.entries) changed.removed = result.entries.find(previous => previous.key === changed.key)?.removed ?? [];
+        for (const [index, changed] of updated.entries.entries()) changed.removed = result.entries[index]?.removed ?? [];
         source.value = updated.bib;
         invalidate(); displayResult(updated);
 
-        const nextSelect = [...document.querySelectorAll<HTMLSelectElement>('select')].find(select => select.dataset.entryKey === entry.key);
+        const nextSelect = [...document.querySelectorAll<HTMLSelectElement>('select')].find(select => select.dataset.entryIndex === String(entryIndex));
         nextSelect?.focus();
       } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
     });
     controls.append(typeLabel, changeType);
     const row = document.createElement('div'); row.className = 'filename-row';
     entryTools.append(controls);
-    const label = document.createElement('label'); label.textContent = entry.key;
+    const label = document.createElement('label'); label.textContent = displayKey;
     const input = document.createElement('input'); input.readOnly = true; input.value = entry.filename;
     input.id = `filename-${filenames.children.length}`; label.htmlFor = input.id;
     input.addEventListener('click', () => input.select());
-    const button = document.createElement('button'); button.textContent = 'コピー'; button.type = 'button'; button.setAttribute('aria-label', `${entry.key} のファイル名をコピー`);
+    const button = document.createElement('button'); button.textContent = 'コピー'; button.type = 'button'; button.setAttribute('aria-label', `${displayKey} のファイル名をコピー`);
     button.addEventListener('click', () => void copyText(entry.filename, input));
     row.append(input, button);
     const group = document.createElement('div'); group.className = 'filename-entry'; group.append(label, row); filenames.append(group);
