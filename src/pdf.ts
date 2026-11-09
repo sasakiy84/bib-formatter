@@ -81,7 +81,6 @@ export function metadataToBib(metadata: PdfMetadata): Conversion {
   const type = metadata.booktitle ? 'inproceedings' : metadata.journal ? 'article' : 'misc';
   const input = `@${type}{pdf-import,\n${Object.entries(fields).map(([name, value]) => `  ${name} = {${value}},`).join('\n')}\n}`;
   const conversion = convertBib(input);
-  conversion.warnings.unshift('PDF から作成しました。内容を確認し、入力欄で引用キー・文献種別・不足項目を修正できます。');
   if (!date) conversion.warnings.push('PDF に出版日がありません。PDF の作成日・更新日を出版年の代わりには使用していません。');
   return conversion;
 }

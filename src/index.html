@@ -16,24 +16,32 @@
     .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-block: .8rem; }
     button, input, select { font: inherit; }
     select { max-width: 100%; padding: .4rem; }
-    .filename-entry { padding-block: .5rem; border-bottom: 1px solid GrayText; }
+    .filename-entry { padding-block: .5rem; }
+    .filename-entry > label { display: block; font-size: .85rem; overflow-wrap: anywhere; }
+    #entry-tools .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+    #entry-tools label { display: grid; grid-template-columns: minmax(0, 1fr) 10rem; align-items: center; gap: .5rem; }
+    #entry-tools select { width: 100%; min-width: 0; }
+    #entry-tools select, #entry-tools button { box-sizing: border-box; height: 2.75rem; margin: 0; }
+    #entry-tools button { white-space: nowrap; }
+    #field-tools p { margin-bottom: 0; }
     button { padding: .4rem .85rem; cursor: pointer; }
     button:disabled { cursor: default; }
     input[type=file] { max-width: 100%; }
-    .panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
-    .pane { min-width: 0; }
+    .panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.5rem; }
+    .pane { min-width: 0; display: grid; grid-template-rows: subgrid; grid-row: span 4; }
+    .pane-actions, .pane > .toolbar { align-self: start; }
     textarea { display: block; box-sizing: border-box; width: 100%; min-height: 25rem; padding: .85rem; resize: vertical; font: .9rem/1.6 ui-monospace, monospace; tab-size: 2; }
     .result-head { display: flex; align-items: baseline; gap: 1rem; }
-    #status { min-height: 1.6em; }
+    #status:empty { display: none; }
     #warnings { padding: 1rem 1rem 1rem 2.5rem; border: 1px solid GrayText; }
     #warnings:empty { display: none; }
-    .filename-row { display: flex; gap: .6rem; align-items: center; margin-block: .7rem; }
-    .filename-row label { min-width: 0; flex: 1; font-size: .85rem; overflow-wrap: anywhere; }
-    .filename-row input { display: block; box-sizing: border-box; width: 100%; padding: .55rem; font-family: ui-monospace, monospace; }
+    .filename-row { display: flex; gap: .6rem; align-items: stretch; margin-block: .3rem .7rem; }
+    .filename-row input { flex: 1; min-width: 0; padding: .4rem .55rem; font-family: ui-monospace, monospace; }
+    .filename-row input, .filename-row button { box-sizing: border-box; height: 2.75rem; margin: 0; }
     details { margin-top: 1.5rem; }
     summary { cursor: pointer; }
     footer { margin-top: 2rem; font-size: .85rem; color: GrayText; }
-    @media (max-width: 700px) { .panes { grid-template-columns: 1fr; } textarea { min-height: 18rem; } .filename-row { align-items: end; } }
+    @media (max-width: 700px) { .panes { grid-template-columns: 1fr; gap: 1.5rem; } .pane { display: block; grid-row: auto; } #entry-tools label { grid-template-columns: 1fr; } textarea { min-height: 18rem; } }
   </style>
 </head>
 <body>
@@ -45,6 +53,7 @@
     <div class="panes">
       <section class="pane" aria-labelledby="input-title">
         <h2 id="input-title"><label for="source">入力する .bib</label></h2>
+        <div class="pane-actions">
         <div class="toolbar">
           <input id="file" type="file" accept=".bib,.bibtex,.pdf,text/plain,application/pdf" aria-label=".bib または PDF ファイルを開く">
           <button id="example" type="button">サンプルを入力</button>
@@ -52,6 +61,7 @@
         <div class="toolbar">
           <label><input id="infer-first-page" type="checkbox" role="switch" checked aria-describedby="inference-help"> PDFの1ページ目から不足情報を推定</label>
           <small id="inference-help">次に開くPDFに適用します</small>
+        </div>
         </div>
         <textarea id="source" spellcheck="false" placeholder="@article{key,&#10;  author = {Smith, Jane},&#10;  title = {An Example},&#10;  year = {2024},&#10;}" aria-describedby="privacy"></textarea>
         <div class="toolbar">
@@ -61,14 +71,19 @@
       </section>
       <section class="pane" aria-labelledby="output-title">
         <h2 id="output-title"><label for="output">変換した biblatex</label></h2>
+        <div class="pane-actions">
         <div class="toolbar">
           <button id="copy" type="button" disabled>結果をコピー</button>
           <button id="download" type="button" disabled>.bib を保存</button>
         </div>
+        </div>
         <textarea id="output" spellcheck="false" placeholder="変換結果がここに表示されます。直接編集できます。"></textarea>
+        <div class="editor-tools">
+        <div id="entry-tools" aria-label="文献種別の編集"></div>
         <div id="field-tools" hidden>
           <p>フィールドを追加</p>
           <div id="field-buttons" class="toolbar" aria-label="フィールドを追加"></div>
+        </div>
         </div>
       </section>
     </div>
@@ -76,15 +91,14 @@
     <ul id="warnings" aria-label="確認する項目"></ul>
     <section aria-labelledby="filenames-title">
       <div class="result-head"><h2 id="filenames-title">文献とファイル名</h2><button id="copy-names" disabled>すべてコピー</button></div>
-      <p>Year_Authors_Title ・著者は最大3人、4人以上は et-al ・拡張子なし</p>
       <div id="filenames"></div>
     </section>
     <details>
       <summary>変換ルール</summary>
       <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。不足する情報は1ページ目の見出しから推定し、確認を促します。OCR は行いません。生成した bib は右側で直接編集でき、ファイル名に反映されます。</p>
       <p>引用キーと LaTeX の大文字保護・数式を保持し、フィールド名・並び順・波括弧の形式を統一します。journal → journaltitle、address → location、school → institution、year / month → date など、BibTeX の表記を biblatex に寄せます。</p>
-      <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子・文献間の参照と、アンダーバー（_）で始まる独自フィールドを残します。abstract・keywords・file・メモなどは削除し、削除したフィールドを件数とともに表示します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
-      <p>ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは nd、著者なしは Unknown と表示します。</p>
+      <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子・文献間の参照と、アンダーバー（_）で始まる独自フィールドを残します。abstract・keywords・file・メモなどは削除します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
+      <p>ファイル名は Year_Authors_Title の形式で、拡張子は付けません。著者は最大3人で、4人以上は et-al を付けます。ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは nd、著者なしは Unknown と表示します。</p>
     </details>
   </main>
   <footer id="privacy">入力内容はブラウザ内で処理します。サーバーへの送信や入力内容の保存は行いません。推定設定だけをブラウザに保存します。HTML を保存すればオフラインでも使えます。</footer>

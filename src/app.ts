@@ -16,6 +16,7 @@ const copy = element('copy', HTMLButtonElement);
 const download = element('download', HTMLButtonElement);
 const copyNames = element('copy-names', HTMLButtonElement);
 const fieldTools = element('field-tools', HTMLDivElement);
+const entryTools = element('entry-tools', HTMLDivElement);
 const fieldButtons = element('field-buttons', HTMLDivElement);
 const inferFirstPage = element('infer-first-page', HTMLInputElement);
 const inferenceSetting = 'bib-formatter.infer-first-page';
@@ -35,6 +36,7 @@ function invalidate(preserveOutput = false): void {
   if (!preserveOutput) output.value = '';
   fieldTools.hidden = true;
   fieldButtons.replaceChildren();
+  entryTools.replaceChildren();
   filenames.replaceChildren();
   warnings.replaceChildren();
   copy.disabled = download.disabled = copyNames.disabled = true;
@@ -43,7 +45,7 @@ function invalidate(preserveOutput = false): void {
 async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputElement): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
-    status.textContent = 'コピーしました。';
+    status.textContent = '';
   } catch {
     fallback.focus(); fallback.select();
     status.textContent = 'コピーする内容を選択しました。Ctrl+C / ⌘C でコピーしてください。';
@@ -52,7 +54,7 @@ async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputE
 function sourceChanged(): void {
   inputRevision++;
   if (!output.value.trim()) invalidate(true);
-  else status.textContent = '入力を変更しました。「biblatex に変換」で右側を更新できます。';
+  else status.textContent = '';
 }
 let pasteIntoEmptyOutput = false;
 source.addEventListener('paste', () => { pasteIntoEmptyOutput = !output.value.trim(); });
@@ -69,7 +71,7 @@ output.addEventListener('input', () => {
   try {
     const updated = convertBib(text);
     displayResult({ ...updated, bib: text }, false);
-    status.textContent = '編集内容をファイル名に反映しました。';
+
   } catch (error) { status.textContent = `編集中: ${error instanceof Error ? error.message : String(error)}`; }
 });
 element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
@@ -80,6 +82,7 @@ function displayResult(conversion: Conversion, writeOutput = true): void {
   filenames.replaceChildren();
   warnings.replaceChildren();
   fieldButtons.replaceChildren();
+  entryTools.replaceChildren();
   fieldTools.hidden = result.entries.length !== 1;
   const singleEntry = result.entries.length === 1 ? result.entries[0] : undefined;
   if (singleEntry) {
@@ -95,19 +98,18 @@ function displayResult(conversion: Conversion, writeOutput = true): void {
           invalidate(); displayResult(updated);
           const caret = output.value.indexOf(`  ${field} = {`) + `  ${field} = {`.length;
           output.focus(); output.setSelectionRange(caret, caret);
-          status.textContent = `${label}を追加しました。値を入力してください。`;
+
         } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
       });
       fieldButtons.append(button);
     }
   }
-  const removedCount = result.entries.reduce((sum, entry) => sum + entry.removed.length, 0);
-  status.textContent = `${result.entries.length}件を変換しました。${removedCount}個の不要なフィールドを削除しました。`;
-  const messages = [...result.warnings, ...result.entries.filter(entry => entry.removed.length).map(entry => `${entry.key}: 削除したフィールド — ${entry.removed.join(', ')}`)];
+  status.textContent = '';
+  const messages = result.warnings;
   for (const message of messages) { const li = document.createElement('li'); li.textContent = message; warnings.append(li); }
   for (const entry of result.entries) {
     const controls = document.createElement('div'); controls.className = 'toolbar';
-    const typeLabel = document.createElement('label'); typeLabel.textContent = '文献種別 ';
+    const typeLabel = document.createElement('label'); typeLabel.textContent = result.entries.length === 1 ? '文献種別 ' : `${entry.key} の文献種別 `;
     const typeSelect = document.createElement('select'); typeSelect.setAttribute('aria-label', `${entry.key} の文献種別`); typeSelect.dataset.entryKey = entry.key;
     const choices: [string, string][] = [['article', '雑誌論文'], ['inproceedings', '会議論文'], ['book', '書籍'], ['incollection', '書籍の章'], ['phdthesis', '博士論文'], ['mathesis', '修士論文'], ['thesis', 'その他の学位論文'], ['report', '報告書'], ['online', 'Webページ'], ['unpublished', '未刊行資料'], ['misc', 'その他・未分類']];
     const selected = entry.type === 'thesis' && ['phdthesis', 'mathesis'].includes(entry.fields.type ?? '') ? entry.fields.type! : entry.type;
@@ -124,21 +126,22 @@ function displayResult(conversion: Conversion, writeOutput = true): void {
         for (const changed of updated.entries) changed.removed = result.entries.find(previous => previous.key === changed.key)?.removed ?? [];
         source.value = updated.bib;
         invalidate(); displayResult(updated);
-        status.textContent = `${entry.key} の種別を変更しました。`;
+
         const nextSelect = [...document.querySelectorAll<HTMLSelectElement>('select')].find(select => select.dataset.entryKey === entry.key);
         nextSelect?.focus();
       } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
     });
     controls.append(typeLabel, changeType);
     const row = document.createElement('div'); row.className = 'filename-row';
+    entryTools.append(controls);
     const label = document.createElement('label'); label.textContent = entry.key;
     const input = document.createElement('input'); input.readOnly = true; input.value = entry.filename;
+    input.id = `filename-${filenames.children.length}`; label.htmlFor = input.id;
     input.addEventListener('click', () => input.select());
-    label.append(input);
     const button = document.createElement('button'); button.textContent = 'コピー'; button.type = 'button'; button.setAttribute('aria-label', `${entry.key} のファイル名をコピー`);
     button.addEventListener('click', () => void copyText(entry.filename, input));
-    row.append(label, button);
-    const group = document.createElement('div'); group.className = 'filename-entry'; group.append(row, controls); filenames.append(group);
+    row.append(input, button);
+    const group = document.createElement('div'); group.className = 'filename-entry'; group.append(label, row); filenames.append(group);
   }
   copy.disabled = download.disabled = copyNames.disabled = false;
 }
@@ -152,7 +155,6 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
   const revision = inputRevision;
   const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
   const useFirstPage = inferFirstPage.checked;
-  status.textContent = isPdf ? (useFirstPage ? 'PDF のメタデータと1ページ目を読み込んでいます…' : 'PDF のメタデータを読み込んでいます…') : 'ファイルを読み込んでいます…';
   try {
     if (isPdf) {
       const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()), { inferFirstPage: useFirstPage });
@@ -163,7 +165,7 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
       const text = await file.text();
       if (revision !== inputRevision) return;
       source.value = text;
-      status.textContent = '読み込みました。「biblatex に変換」を押してください。';
+      status.textContent = '';
     }
   } catch (error) {
     if (revision === inputRevision) status.textContent = `読み込めませんでした: ${error instanceof Error ? error.message : String(error)}`;
@@ -182,7 +184,7 @@ copy.addEventListener('click', () => { if (result) void copyText(result.bib, out
 copyNames.addEventListener('click', async () => {
   if (!result) return;
   const text = result.entries.map(entry => entry.filename).join('\n');
-  try { await navigator.clipboard.writeText(text); status.textContent = 'ファイル名をすべてコピーしました。'; }
+  try { await navigator.clipboard.writeText(text); status.textContent = ''; }
   catch { status.textContent = 'クリップボードを利用できません。各ファイル名を選択してコピーしてください。'; }
 });
 download.addEventListener('click', () => {

@@ -8,7 +8,7 @@ for (const width of [1280, 390]) {
     await page.goto('/');
     await page.getByRole('button', { name: 'サンプルを入力' }).click();
     await page.getByRole('button', { name: 'biblatex に変換' }).click();
-    await expect(page.getByRole('status')).toContainText('3件を変換');
+    await expect(page.getByLabel('nakaya1938', { exact: true })).toHaveValue('1938_中谷_雪');
     await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/journaltitle =/);
     await expect(page.getByLabel('nakaya1938', { exact: true })).toHaveValue('1938_中谷_雪');
     await expect(page.getByLabel('sample2024', { exact: true })).toHaveValue('2024_Smith-Jones-Lee-et-al_A-Sample-Study-of-AI-Tools');
@@ -46,7 +46,7 @@ test('copies an individual filename without whitespace', async ({ page, context 
   await page.getByRole('button', { name: 'サンプルを入力' }).click();
   await page.getByRole('button', { name: 'biblatex に変換' }).click();
   await page.getByRole('button', { name: 'sample2024 のファイル名をコピー', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('コピーしました。');
+  await expect(page.getByRole('status')).not.toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('2024_Smith-Jones-Lee-et-al_A-Sample-Study-of-AI-Tools');
 });
 test('built HTML works offline as a local file without subresource requests', async ({ page, context }) => {
@@ -56,7 +56,7 @@ test('built HTML works offline as a local file without subresource requests', as
   await page.goto(new URL('../../dist/index.html', import.meta.url).href);
   await page.getByRole('button', { name: 'サンプルを入力' }).click();
   await page.getByRole('button', { name: 'biblatex に変換' }).click();
-  await expect(page.getByRole('status')).toContainText('3件を変換');
+  await expect(page.getByLabel('nakaya1938', { exact: true })).toHaveValue('1938_中谷_雪');
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatch(/^file:/);
 });
@@ -70,7 +70,7 @@ for (const width of [1280, 390]) {
     page.on('pageerror', error => errors.push(error.message));
     await page.goto('/');
     await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'paper.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ xmp: englishXmp })) });
-    await expect(page.getByRole('status')).toContainText('1件を変換');
+    await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
     await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/journaltitle = \{Journal of Examples\}/);
     await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
     await page.getByRole('button', { name: 'pdf-import のファイル名をコピー', exact: true }).click();
@@ -239,3 +239,41 @@ test('PDF inference still works when browser storage is unavailable', async ({ p
   await page.getByRole('textbox', { name: '変換した biblatex' }).fill('@misc{x,title={Still Works}}');
   await expect(page.getByLabel('x', { exact: true })).toHaveValue('nd_Unknown_Still-Works');
 });
+for (const width of [1280, 390]) {
+  test(`editing controls stay beside output and filename rows align at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'サンプルを入力' }).click();
+    await page.getByRole('button', { name: 'biblatex に変換' }).click();
+    await expect(page.getByRole('status')).not.toBeVisible();
+    const editor = page.getByRole('region', { name: '変換した biblatex' });
+    await expect(editor.getByRole('combobox', { name: 'nakaya1938 の文献種別' })).toBeVisible();
+    await editor.getByRole('combobox', { name: 'nakaya1938 の文献種別' }).selectOption({ label: '雑誌論文' });
+    await editor.getByRole('button', { name: 'nakaya1938 の種別を変更', exact: true }).click();
+    await expect(page.getByRole('status')).not.toBeVisible();
+    const type = await editor.getByRole('combobox', { name: 'nakaya1938 の文献種別' }).boundingBox();
+    const change = await editor.getByRole('button', { name: 'nakaya1938 の種別を変更', exact: true }).boundingBox();
+    if (!type || !change) throw new Error('Type controls not visible');
+    expect(Math.abs(type.y - change.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(type.height - change.height)).toBeLessThanOrEqual(1);
+    const files = page.getByRole('region', { name: '文献とファイル名' });
+    await expect(files.getByRole('combobox')).toHaveCount(0);
+    await expect(files).not.toContainText('Year_Authors_Title');
+    for (const key of ['turing1936', 'nakaya1938', 'sample2024']) {
+      const input = await page.getByLabel(key, { exact: true }).boundingBox();
+      const button = await page.getByRole('button', { name: `${key} のファイル名をコピー`, exact: true }).boundingBox();
+      if (!input || !button) throw new Error('Filename controls not visible');
+      expect(Math.abs(input.y - button.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(input.height - button.height)).toBeLessThanOrEqual(1);
+    }
+    if (width > 700) {
+      const source = await page.getByRole('textbox', { name: '入力する .bib' }).boundingBox();
+      const output = await page.getByRole('textbox', { name: '変換した biblatex' }).boundingBox();
+      if (!source || !output) throw new Error('Editors not visible');
+      expect(Math.abs(source.y - output.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(source.height - output.height)).toBeLessThanOrEqual(1);
+    }
+    await page.screenshot({ path: `test-results/aligned-controls-${width}.png`, fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
