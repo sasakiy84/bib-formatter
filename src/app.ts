@@ -246,7 +246,8 @@ copyNames.addEventListener('click', async () => {
 download.addEventListener('click', () => {
   if (!result) return;
   const url = URL.createObjectURL(new Blob([result.bib], { type: 'application/x-bibtex;charset=utf-8' }));
-  const link = document.createElement('a'); link.href = url; link.download = 'formatted.bib'; link.click();
+  const key = (result.entries[0]?.key || 'references').replace(/[<>:"/\\|?*\p{Cc}\p{Cf}]/gu, '-');
+  const link = document.createElement('a'); link.href = url; link.download = `_${key}.bib`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 

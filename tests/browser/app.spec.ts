@@ -46,7 +46,7 @@ for (const width of [1280, 390]) {
     const pendingDownload = page.waitForEvent('download');
     await page.getByRole('button', { name: '.bib を保存' }).click();
     const download = await pendingDownload;
-    expect(download.suggestedFilename()).toBe('formatted.bib');
+    expect(download.suggestedFilename()).toBe('_Turing1936.bib');
     await page.screenshot({ path: `test-results/screen-${width}.png`, fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
@@ -108,7 +108,7 @@ for (const width of [1280, 390]) {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: '.bib を保存' }).click();
-    expect((await pending).suggestedFilename()).toBe('formatted.bib');
+    expect((await pending).suggestedFilename()).toBe('_Smith2024.bib');
     await page.screenshot({ path: `test-results/pdf-${width}.png`, fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
@@ -166,6 +166,9 @@ test('editing the output updates filenames and copies the exact edited bib', asy
   await expect(page.getByLabel('edited', { exact: true })).toHaveValue('2026_Jones_Edited-English-Title');
   await page.getByRole('button', { name: '結果をコピー', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(edited);
+  const pendingDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '.bib を保存' }).click();
+  expect((await pendingDownload).suggestedFilename()).toBe('_edited.bib');
 });
 test('editing malformed output retains the draft and recovers filenames after correction', async ({ page }) => {
   await page.goto('/');
