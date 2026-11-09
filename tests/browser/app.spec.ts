@@ -283,3 +283,23 @@ test('PDF import uses the selected input language', async ({ page }) => {
   await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'language.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ title: 'A Study', author: 'Jane Smith', year: '2025' })) });
   await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/language = \{english\}/);
 });
+test('bibtex query parameter fills the input and converts Unicode and reserved characters once', async ({ page }) => {
+  const bib = '@misc{, author={山田, 太郎}, title={日本語 + A&B #? 100%25}, year=2026}';
+  await page.goto(`/?${new URLSearchParams({ bibtex: bib })}`);
+  await expect(page.getByRole('textbox', { name: '入力する .bib' })).toHaveValue(bib);
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/^@misc\{山田2026,/);
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/日本語 \+ A&B #\? 100%25/);
+});
+test('invalid bibtex query parameter keeps the input available for editing', async ({ page }) => {
+  const bib = '@article{broken';
+  await page.goto(`/?${new URLSearchParams({ bibtex: bib })}`);
+  await expect(page.getByRole('textbox', { name: '入力する .bib' })).toHaveValue(bib);
+  await expect(page.getByRole('status')).toContainText('変換できませんでした');
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue('');
+});
+test('empty bibtex query parameter leaves the editors empty', async ({ page }) => {
+  await page.goto('/?bibtex=');
+  await expect(page.getByRole('textbox', { name: '入力する .bib' })).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue('');
+  await expect(page.getByRole('status')).not.toBeVisible();
+});

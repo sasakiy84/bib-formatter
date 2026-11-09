@@ -197,3 +197,9 @@ download.addEventListener('click', () => {
   const link = document.createElement('a'); link.href = url; link.download = 'formatted.bib'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
+
+const initialBibtex = new URLSearchParams(window.location.search).get('bibtex');
+if (initialBibtex?.trim()) {
+  source.value = initialBibtex;
+  convertSource();
+}

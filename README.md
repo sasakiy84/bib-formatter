@@ -1,6 +1,6 @@
 # Bib Formatter
 
-.bib と PDF のメタデータを biblatex に統一し、`Year_Authors_Title` のファイル名を作るブラウザ用ツールです。ビルド結果は `dist/index.html` の1ファイルで、保存すればオフラインでも動きます。入力した文献情報を送信・保存しません。
+.bib と PDF のメタデータを biblatex に統一し、`Year_Authors_Title` のファイル名を作るブラウザ用ツールです。ビルド結果は `dist/index.html` の1ファイルで、保存すればオフラインでも動きます。変換処理はブラウザ内で行います。
 
 公開先: https://sasakiy84.github.io/bib-formatter/
 
@@ -15,6 +15,18 @@
 ファイル名には著者の姓を最大3人まで含め、4人以上なら `et-al` を付けます。著者がなければ編者を使います。日本語の姓名を分ける場合は `姓, 名` と記述してください。英語の名前・タイトルの空白はハイフンになります。日本語は保持し、拡張子を含まない名前を UTF-8 で240バイト以内に収めます。
 
 例: `2024_Smith-Jones-Lee-et-al_An-English-Title`
+
+## URL からの入力
+
+`bibtex` クエリパラメータに URL エンコードした BibTeX を渡すと、入力欄へ読み込み、自動変換します。日本語・改行・記号は `URLSearchParams` または `encodeURIComponent` でエンコードしてください。
+
+```js
+const url = new URL('https://sasakiy84.github.io/bib-formatter/');
+url.searchParams.set('bibtex', '@misc{, author={山田, 太郎}, title={研究}, year=2026}');
+console.log(url.href);
+```
+
+パラメータが空なら何も入力しません。構文に誤りがある場合は入力を保持してエラーを表示します。URL経由の入力は、クエリとしてページの配信元にも送られます。
 
 ## PDF からの変換
 
