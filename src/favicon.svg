@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Bib Formatter</title>
+  <path fill="#fff" d="M0 0h64v64H0z"/>
+  <g fill="#000">
+    <path d="M2 12h19a9 9 0 0 1 0 18H2zM2 34h19a9 9 0 0 1 0 18H2z"/>
+    <path d="M34 12h28v10H34zM34 26h28v13H45v13H34z"/>
+  </g>
+</svg>

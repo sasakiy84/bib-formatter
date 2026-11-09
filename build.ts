@@ -3,6 +3,8 @@ const result = await Bun.build({ entrypoints: ['./src/app.ts'], target: 'browser
 if (!result.success) throw new AggregateError(result.logs, 'Build failed');
 const script = await result.outputs[0]!.text();
 let template = await Bun.file('src/index.html').text();
+const favicon = await Bun.file('src/favicon.svg').text();
+template = template.replace('<!-- FAVICON -->', `<link rel="icon" type="image/svg+xml" sizes="any" href="data:image/svg+xml,${encodeURIComponent(favicon)}">`);
 // Retain third-party notices inside the standalone distribution.
 const licenses: string[] = [];
 for await (const path of new Bun.Glob('node_modules/**/{LICENSE,LICENSE.*,LICENCE,license,license.*}').scan({ onlyFiles: true })) {
