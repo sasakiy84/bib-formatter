@@ -1,4 +1,3 @@
-import { firstPageLines, inferHeading, japaneseAuthorList } from './pdf-text';
 import { PDFDocument, PDFName, PDFRawStream, PDFDict, PDFString, PDFHexString, decodePDFRawStream } from 'pdf-lib';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { convertBib, type Conversion } from './formatter';
@@ -9,7 +8,14 @@ export interface PdfMetadata {
   publicationDate: string;
   journal: string;
   doi: string;
-  booktitle?: string;
+}
+
+export function japaneseAuthorList(value: string): string[] {
+  const parts = value.split(/[,、，]\s*/);
+  const japaneseFullName = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々]+[\s　]+[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々]+$/u;
+  if (parts.length > 1 && parts.every(part => japaneseFullName.test(part.trim()))) return parts.map(part => part.trim().replace(/[\s　]+/u, ', '));
+  if (japaneseFullName.test(value.trim())) return [value.trim().replace(/[\s　]+/u, ', ')];
+  return [value];
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -68,7 +74,6 @@ function bibText(value: string): string {
 }
 export function metadataToBib(metadata: PdfMetadata): Conversion {
   const fields: Record<string, string> = {};
-  if (metadata.booktitle) fields.booktitle = bibText(metadata.booktitle);
   if (metadata.title) fields.title = bibText(metadata.title);
   if (metadata.authors.length) fields.author = metadata.authors.map(author => {
     const escaped = bibText(author);
@@ -78,14 +83,14 @@ export function metadataToBib(metadata: PdfMetadata): Conversion {
   if (date) fields.date = date;
   if (metadata.journal) fields.journaltitle = bibText(metadata.journal);
   if (metadata.doi) fields.doi = metadata.doi.replace(/[\\{}\p{Cc}]/gu, char => encodeURIComponent(char));
-  const type = metadata.booktitle ? 'inproceedings' : metadata.journal ? 'article' : 'misc';
+  const type = metadata.journal ? 'article' : 'misc';
   const input = `@${type}{pdf-import,\n${Object.entries(fields).map(([name, value]) => `  ${name} = {${value}},`).join('\n')}\n}`;
   const conversion = convertBib(input);
   if (!date) conversion.warnings.push('PDF に出版日がありません。PDF の作成日・更新日を出版年の代わりには使用していません。');
   return conversion;
 }
 
-export async function convertPdf(bytes: Uint8Array, { inferFirstPage = true }: { inferFirstPage?: boolean } = {}): Promise<Conversion> {
+export async function convertPdf(bytes: Uint8Array): Promise<Conversion> {
   let document: PDFDocument;
   try { document = await PDFDocument.load(bytes, { updateMetadata: false }); }
   catch (error) {
@@ -127,20 +132,7 @@ export async function convertPdf(bytes: Uint8Array, { inferFirstPage = true }: {
   if (/^(?:LaTeX(?: with hyperref)?|untitled|Microsoft (?:Word|PowerPoint).*)$/i.test(metadata.title)) metadata.title = '';
   metadata.authors = metadata.authors.filter(author => !/^LaTeX(?: with hyperref)?$/i.test(author));
   metadata.authors = metadata.authors.flatMap(japaneseAuthorList);
-  const inferred: string[] = [];
-  let textWarning = '';
-  if (inferFirstPage && (!metadata.title || !metadata.authors.length || !metadata.publicationDate)) {
-    try {
-      const heading = inferHeading(await firstPageLines(bytes));
-      if (!metadata.title && heading.title) { metadata.title = heading.title; inferred.push('タイトル'); }
-      if (!metadata.authors.length && heading.authors?.length) { metadata.authors = heading.authors; inferred.push('著者'); }
-      if (!metadata.publicationDate && heading.publicationDate) { metadata.publicationDate = heading.publicationDate; inferred.push('出版年月'); }
-      if (!metadata.journal && heading.booktitle) { metadata.booktitle = heading.booktitle; inferred.push('会議名・文献種別'); }
-    } catch { textWarning = '1ページ目から不足情報を読み取れませんでした。入力欄で補完してください。'; }
-  }
   const conversion = metadataToBib(metadata);
-  if (inferred.length) conversion.warnings.unshift(`1ページ目の見出しから ${inferred.join('・')} を推定しました。内容を確認してください。`);
-  if (textWarning) conversion.warnings.push(textWarning);
   if (xmpWarning) conversion.warnings.push(xmpWarning);
   return conversion;
 }

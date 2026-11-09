@@ -1,7 +1,6 @@
-import { inferHeading, japaneseAuthorList } from '../src/pdf-text';
 import { expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { convertPdf, metadataToBib, parseXmp } from '../src/pdf';
+import { convertPdf, metadataToBib, parseXmp, japaneseAuthorList } from '../src/pdf';
 import { englishXmp, makePdf } from './pdf-fixtures';
 
 test('English PDF Info produces biblatex and at most three authors in the filename', async () => {
@@ -75,24 +74,11 @@ test('Japanese name splitting preserves Western comma notation', () => {
   expect(japaneseAuthorList('山田, 太郎')).toEqual(['山田, 太郎']);
   expect(japaneseAuthorList('山田 太郎, 鈴木 花子')).toEqual(['山田, 太郎', '鈴木, 花子']);
 });
-test('infers Japanese publication date, title, authors and proceedings from the first-page heading', () => {
-  const metadata = inferHeading([
-    { text: '架空学会 第10回年次大会 発表論文集（2025年4月）', size: 10, top: .04 },
-    { text: '架空の日本語文献の研究', size: 18, top: .12 },
-    { text: '山田 太郎 1  鈴木 花子 2', size: 12, top: .16 },
-    { text: '1 架空大学 2 架空研究所', size: 10, top: .19 },
-    { text: '参考文献 1999年', size: 10, top: .9 },
-  ]);
-  expect(metadata.publicationDate).toBe('2025-04');
-  expect(metadata.title).toBe('架空の日本語文献の研究');
-  expect(metadata.authors).toEqual(['山田, 太郎', '鈴木, 花子']);
-  expect(metadata.booktitle).toBe('架空学会 第10回年次大会 発表論文集');
-});
-test('does not infer publication year from body references', () => {
-  expect(inferHeading([{ text: 'See Smith (1999)', size: 10, top: .7 }]).publicationDate).toBeUndefined();
-});
-test('disabling first-page inference uses metadata without trying to read page text', async () => {
-  const converted = await convertPdf(await makePdf({ title: 'Metadata Title', author: 'Smith, Jane' }), { inferFirstPage: false });
+test('PDF import uses metadata only and does not fill a missing year from page text', async () => {
+  const converted = await convertPdf(await makePdf({ title: 'Metadata Title', author: 'Smith, Jane', text: [
+    { text: 'Example Conference (2025)', x: 80, y: 810, size: 10 },
+  ] }));
   expect(converted.entries[0]?.filename).toBe('nd_Smith_Metadata-Title');
+  expect(converted.entries[0]?.fields.booktitle).toBeUndefined();
   expect(converted.warnings.join('\n')).not.toContain('1ページ目');
 });

@@ -58,10 +58,6 @@
           <input id="file" type="file" accept=".bib,.bibtex,.pdf,text/plain,application/pdf" aria-label=".bib または PDF ファイルを開く">
           <button id="example" type="button">サンプルを入力</button>
         </div>
-        <div class="toolbar">
-          <label><input id="infer-first-page" type="checkbox" role="switch" checked aria-describedby="inference-help"> PDFの1ページ目から不足情報を推定</label>
-          <small id="inference-help">次に開くPDFに適用します</small>
-        </div>
         </div>
         <textarea id="source" spellcheck="false" placeholder="@article{key,&#10;  author = {Smith, Jane},&#10;  title = {An Example},&#10;  year = {2024},&#10;}" aria-describedby="privacy"></textarea>
         <div class="toolbar">
@@ -95,13 +91,13 @@
     </section>
     <details>
       <summary>変換ルール</summary>
-      <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。不足する情報は1ページ目の見出しから推定し、確認を促します。OCR は行いません。生成した bib は右側で直接編集でき、ファイル名に反映されます。</p>
+      <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。紙面からの推定や OCR は行いません。生成した bib は右側で直接編集でき、ファイル名に反映されます。</p>
       <p>引用キーと LaTeX の大文字保護・数式を保持し、フィールド名・並び順・波括弧の形式を統一します。journal → journaltitle、address → location、school → institution、year / month → date など、BibTeX の表記を biblatex に寄せます。</p>
       <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子・文献間の参照と、アンダーバー（_）で始まる独自フィールドを残します。abstract・keywords・file・メモなどは削除します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
       <p>ファイル名は Year_Authors_Title の形式で、拡張子は付けません。著者は最大3人で、4人以上は et-al を付けます。ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは nd、著者なしは Unknown と表示します。</p>
     </details>
   </main>
-  <footer id="privacy">入力内容はブラウザ内で処理します。サーバーへの送信や入力内容の保存は行いません。推定設定だけをブラウザに保存します。HTML を保存すればオフラインでも使えます。</footer>
+  <footer id="privacy">入力内容はブラウザ内で処理します。サーバーへの送信や入力内容の保存は行いません。HTML を保存すればオフラインでも使えます。</footer>
   <!-- APP_SCRIPT -->
 </body>
 </html>
