@@ -1,13 +1,23 @@
 import { getFieldActions } from '../src/field-actions';
 import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename, removeEntryField } from '../src/formatter';
+import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename, removeEntryField, stampDownloadDate } from '../src/formatter';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
   if (!entry) throw new Error('No entry');
   return entry;
 }
+test('download date updates every entry without changing edited keys, custom fields or preambles', () => {
+  const stamped = stampDownloadDate('@preamble{"Keep"} @article{edited,author={Linell, Per},date={2019},_download_at={2020-01-01},_notes={Keep},custom={Also keep}} @misc{,title={Other}}', new Date(2026, 0, 9, 0, 30));
+  const library = parseVerbatim(stamped.bib);
+  expect(library.entries.map(entry => entry.fields._download_at)).toEqual(['2026-01-09', '2026-01-09']);
+  expect(library.entries.map(entry => entry.key)).toEqual(['edited', '']);
+  expect(library.entries[0]?.fields._notes).toBe('Keep');
+  expect(library.entries[0]?.fields.custom).toBe('Also keep');
+  expect(library.preambles).toEqual(['"Keep"']);
+  expect(stampDownloadDate(stamped.bib, new Date(2026, 0, 10)).entries.map(entry => entry.fields._download_at)).toEqual(['2026-01-10', '2026-01-10']);
+});
 describe('biblatex conversion', () => {
   test('English journal article converts aliases, date, DOI and page ranges', () => {
     const entry = first('@ARTICLE{Turing1936, AUTHOR={Turing, Alan M.}, TITLE={On Computable Numbers}, JOURNAL={Proceedings of the London Mathematical Society}, YEAR=1936, MONTH=nov, PAGES={230–265}, DOI={https://doi.org/10.1112/plms/s2-42.1.230}}');

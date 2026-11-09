@@ -164,6 +164,16 @@ export function changeEntryType(input: string, key: string, selection: string, e
   return { ...converted, warnings: [...warnings, ...converted.warnings], bib };
 }
 
+export function stampDownloadDate(input: string, downloadedAt: Date = new Date()): Conversion {
+  const library = parseVerbatim(input);
+  if (library.errors.length || !library.entries.length) throw new Error('bib を読み込めません。');
+  const date = [String(downloadedAt.getFullYear()).padStart(4, '0'), String(downloadedAt.getMonth() + 1).padStart(2, '0'), String(downloadedAt.getDate()).padStart(2, '0')].join('-');
+  for (const entry of library.entries) entry.fields._download_at = date;
+  const preambles = library.preambles.map(value => `@preamble{${value}}`);
+  const bib = [...preambles, ...library.entries.map(serialize)].join('\n\n') + '\n';
+  return { ...convertBib(bib, { generateKeys: false }), bib };
+}
+
 export function addCommonField(input: string, field: string): Conversion {
   const library = parseVerbatim(input);
   if (library.errors.length || library.entries.length !== 1) throw new Error('フィールドの追加は正しい bib が1件のときに使えます。');
