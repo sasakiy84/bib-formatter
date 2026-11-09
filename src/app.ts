@@ -1,5 +1,5 @@
 import { convertPdf } from './pdf';
-import { changeEntryType, convertBib, type Conversion } from './formatter';
+import { addCommonField, commonFields, changeEntryType, convertBib, type Conversion } from './formatter';
 import { exampleBib } from './examples';
 
 function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
@@ -15,13 +15,17 @@ const filenames = element('filenames', HTMLDivElement);
 const copy = element('copy', HTMLButtonElement);
 const download = element('download', HTMLButtonElement);
 const copyNames = element('copy-names', HTMLButtonElement);
+const fieldTools = element('field-tools', HTMLDivElement);
+const fieldButtons = element('field-buttons', HTMLDivElement);
 let result: Conversion | undefined;
 let inputRevision = 0;
 
-function invalidate(): void {
+function invalidate(preserveOutput = false): void {
   inputRevision++;
   result = undefined;
-  output.value = '';
+  if (!preserveOutput) output.value = '';
+  fieldTools.hidden = true;
+  fieldButtons.replaceChildren();
   filenames.replaceChildren();
   warnings.replaceChildren();
   copy.disabled = download.disabled = copyNames.disabled = true;
@@ -36,12 +40,58 @@ async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputE
     status.textContent = 'コピーする内容を選択しました。Ctrl+C / ⌘C でコピーしてください。';
   }
 }
-source.addEventListener('input', invalidate);
-element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; invalidate(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
+function sourceChanged(): void {
+  inputRevision++;
+  if (!output.value.trim()) invalidate(true);
+  else status.textContent = '入力を変更しました。「biblatex に変換」で右側を更新できます。';
+}
+let pasteIntoEmptyOutput = false;
+source.addEventListener('paste', () => { pasteIntoEmptyOutput = !output.value.trim(); });
+source.addEventListener('input', event => {
+  sourceChanged();
+  const shouldConvert = pasteIntoEmptyOutput && event instanceof InputEvent && event.inputType === 'insertFromPaste';
+  pasteIntoEmptyOutput = false;
+  if (shouldConvert) convertSource();
+});
+output.addEventListener('input', () => {
+  const text = output.value;
+  invalidate(true);
+  if (!text.trim()) return;
+  try {
+    const updated = convertBib(text);
+    displayResult({ ...updated, bib: text }, false);
+    status.textContent = '編集内容をファイル名に反映しました。';
+  } catch (error) { status.textContent = `編集中: ${error instanceof Error ? error.message : String(error)}`; }
+});
+element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
 element('clear', HTMLButtonElement).addEventListener('click', () => { source.value = ''; invalidate(); source.focus(); });
-function displayResult(conversion: Conversion): void {
+function displayResult(conversion: Conversion, writeOutput = true): void {
   result = conversion;
-  output.value = result.bib;
+  if (writeOutput) output.value = result.bib;
+  filenames.replaceChildren();
+  warnings.replaceChildren();
+  fieldButtons.replaceChildren();
+  fieldTools.hidden = result.entries.length !== 1;
+  const singleEntry = result.entries.length === 1 ? result.entries[0] : undefined;
+  if (singleEntry) {
+    for (const [field, label] of commonFields) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.textContent = `${label}を追加`; button.title = field;
+      button.disabled = singleEntry.fields[field] !== undefined;
+      if (field === 'date' && singleEntry.fields.year !== undefined) button.disabled = true;
+      button.addEventListener('click', () => {
+        if (!result) return;
+        try {
+          const updated = addCommonField(result.bib, field);
+          invalidate(); displayResult(updated);
+          const caret = output.value.indexOf(`  ${field} = {`) + `  ${field} = {`.length;
+          output.focus(); output.setSelectionRange(caret, caret);
+          status.textContent = `${label}を追加しました。値を入力してください。`;
+        } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+      });
+      fieldButtons.append(button);
+    }
+  }
   const removedCount = result.entries.reduce((sum, entry) => sum + entry.removed.length, 0);
   status.textContent = `${result.entries.length}件を変換しました。${removedCount}個の不要なフィールドを削除しました。`;
   const messages = [...result.warnings, ...result.entries.filter(entry => entry.removed.length).map(entry => `${entry.key}: 削除したフィールド — ${entry.removed.join(', ')}`)];
@@ -109,11 +159,12 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
     if (revision === inputRevision) status.textContent = `読み込めませんでした: ${error instanceof Error ? error.message : String(error)}`;
   }
 });
-element('convert', HTMLButtonElement).addEventListener('click', () => {
+function convertSource(): void {
   invalidate();
   try { displayResult(convertBib(source.value)); }
   catch (error) { status.textContent = `変換できませんでした: ${error instanceof Error ? error.message : String(error)}`; }
-});
+}
+element('convert', HTMLButtonElement).addEventListener('click', convertSource);
 source.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') element('convert', HTMLButtonElement).click();
 });

@@ -135,3 +135,20 @@ export function changeEntryType(input: string, key: string, selection: string): 
   const preambles = library.preambles.map(value => `@preamble{${value}}`);
   return convertBib([...preambles, ...library.entries.map(serialize)].join('\n\n'));
 }
+
+export const commonFields: readonly (readonly [string, string])[] = [
+  ['title', 'タイトル'], ['author', '著者'], ['date', '出版年月日'], ['journaltitle', '掲載誌'],
+  ['booktitle', '会議名・収録書名'], ['publisher', '出版社'], ['editor', '編者'],
+  ['volume', '巻'], ['number', '号'], ['pages', 'ページ'], ['doi', 'DOI'], ['url', 'URL'], ['urldate', 'アクセス日'],
+];
+
+export function addCommonField(input: string, field: string): Conversion {
+  if (!commonFields.some(([name]) => name === field)) throw new Error('追加できないフィールドです。');
+  const library = parseVerbatim(input);
+  if (library.errors.length || library.entries.length !== 1) throw new Error('フィールドの追加は正しい bib が1件のときに使えます。');
+  const entry = library.entries[0]!;
+  if (entry.fields[field] !== undefined) throw new Error('このフィールドは追加済みです。');
+  entry.fields[field] = '';
+  const preambles = library.preambles.map(value => `@preamble{${value}}`);
+  return convertBib([...preambles, serialize(entry)].join('\n\n'));
+}

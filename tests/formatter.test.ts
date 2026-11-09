@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { changeEntryType, convertBib, makeFilename } from '../src/formatter';
+import { addCommonField, changeEntryType, convertBib, makeFilename } from '../src/formatter';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
@@ -129,4 +129,16 @@ test('degree selection produces biblatex thesis type and can be changed again', 
   expect(changed.entries[0]?.type).toBe('thesis');
   expect(changed.entries[0]?.fields.type).toBe('phdthesis');
   expect(changeEntryType(changed.bib, 'x', 'article').entries[0]?.fields.type).toBeUndefined();
+});
+
+test('adds an empty common field without changing existing bibliography values', () => {
+  const changed = addCommonField('@book{x,title={Original},author={山田, 太郎},date={2024},_memo={Keep}}', 'doi');
+  expect(changed.entries[0]?.fields.doi).toBe('');
+  expect(changed.entries[0]?.fields.title).toBe('Original');
+  expect(changed.entries[0]?.fields._memo).toBe('Keep');
+  expect(changed.entries[0]?.filename).toBe('2024_山田_Original');
+});
+test('does not add duplicate fields or add fields to multiple entries', () => {
+  expect(() => addCommonField('@misc{x,doi={10.1234/example}}', 'doi')).toThrow('追加済み');
+  expect(() => addCommonField('@misc{x,title={X}} @misc{y,title={Y}}', 'doi')).toThrow('1件');
 });

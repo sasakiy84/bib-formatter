@@ -21,15 +21,16 @@ for (const width of [1280, 390]) {
     expect(errors).toEqual([]);
   });
 }
-test('invalid input clears stale output and disables copying', async ({ page }) => {
+test('source edits preserve output until explicit conversion', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('textbox', { name: '入力する .bib' }).fill('@misc{x,title={Valid},year=2024}');
   await page.getByRole('button', { name: 'biblatex に変換' }).click();
   await expect(page.getByRole('button', { name: '結果をコピー' })).toBeEnabled();
   await page.getByRole('textbox', { name: '入力する .bib' }).fill('@article{broken');
+  await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/Valid/);
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
   await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue('');
   await expect(page.getByRole('button', { name: '結果をコピー' })).toBeDisabled();
-  await page.getByRole('button', { name: 'biblatex に変換' }).click();
   await expect(page.getByRole('status')).toContainText('変換できませんでした');
 });
 test('uploaded Japanese bibliography and keyboard conversion work', async ({ page }) => {
@@ -139,4 +140,62 @@ test('extracts missing information from first-page text offline with an embedded
   await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2025_Smith-Jones_A-Synthetic-Paper-Title');
   await expect(page.getByRole('combobox', { name: 'pdf-import の文献種別' })).toHaveValue('inproceedings');
   await expect(page.getByLabel('確認する項目')).toContainText('1ページ目の見出しから');
+});
+test('editing the output updates filenames and copies the exact edited bib', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  const edited = '@article{edited, author={Jones, Alex}, title={Edited English Title}, date={2026}}';
+  await page.getByRole('textbox', { name: '変換した biblatex' }).fill(edited);
+  await expect(page.getByLabel('edited', { exact: true })).toHaveValue('2026_Jones_Edited-English-Title');
+  await page.getByRole('button', { name: '結果をコピー', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(edited);
+});
+test('editing malformed output retains the draft and recovers filenames after correction', async ({ page }) => {
+  await page.goto('/');
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  const broken = '@misc{draft,title={Unclosed';
+  await output.fill(broken);
+  await expect(output).toHaveValue(broken);
+  await expect(page.getByRole('status')).toContainText('編集中');
+  await expect(page.getByRole('button', { name: '結果をコピー', exact: true })).toBeDisabled();
+  await output.press('End');
+  await output.pressSequentially('}}');
+  await expect(page.getByLabel('draft', { exact: true })).toHaveValue('nd_Unknown_Unclosed');
+});
+test('single-entry field buttons insert a field and place the caret in its value', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/');
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await output.fill('@misc{x,title={Editable},author={Smith, Jane}}');
+  await expect(page.getByRole('button', { name: 'タイトルを追加', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '出版年月日を追加', exact: true }).click();
+  await expect(output).toBeFocused();
+  await output.pressSequentially('2027');
+  await expect(page.getByLabel('x', { exact: true })).toHaveValue('2027_Smith_Editable');
+  await expect(page.getByRole('button', { name: '出版年月日を追加', exact: true })).toBeDisabled();
+  await page.screenshot({ path: 'test-results/editing-fields-390.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+test('field-addition controls are hidden for multiple bibliography entries', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '変換した biblatex' }).fill('@misc{x,title={X}} @misc{y,title={Y}}');
+  await expect(page.getByRole('button', { name: 'DOIを追加', exact: true })).toHaveCount(0);
+});
+test('pasting on the left auto-converts only when the output is empty', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: '入力する .bib' });
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await page.evaluate(() => navigator.clipboard.writeText('@misc{pasted,title={Pasted Title},year=2024}'));
+  await source.focus();
+  await source.press('Control+V');
+  await expect(page.getByLabel('pasted', { exact: true })).toHaveValue('2024_Unknown_Pasted-Title');
+  await output.fill('@misc{edited,title={Keep My Edits},year=2025}');
+  await source.focus();
+  await source.press('Control+A');
+  await page.evaluate(() => navigator.clipboard.writeText('@misc{another,title={Another Title},year=2026}'));
+  await source.press('Control+V');
+  await expect(source).toHaveValue(/Another Title/);
+  await expect(output).toHaveValue('@misc{edited,title={Keep My Edits},year=2025}');
+  await expect(page.getByLabel('edited', { exact: true })).toHaveValue('2025_Unknown_Keep-My-Edits');
 });
