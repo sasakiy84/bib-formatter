@@ -91,3 +91,8 @@ test('infers Japanese publication date, title, authors and proceedings from the 
 test('does not infer publication year from body references', () => {
   expect(inferHeading([{ text: 'See Smith (1999)', size: 10, top: .7 }]).publicationDate).toBeUndefined();
 });
+test('disabling first-page inference uses metadata without trying to read page text', async () => {
+  const converted = await convertPdf(await makePdf({ title: 'Metadata Title', author: 'Smith, Jane' }), { inferFirstPage: false });
+  expect(converted.entries[0]?.filename).toBe('nd_Smith_Metadata-Title');
+  expect(converted.warnings.join('\n')).not.toContain('1ページ目');
+});

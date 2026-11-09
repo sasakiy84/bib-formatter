@@ -17,6 +17,15 @@ const download = element('download', HTMLButtonElement);
 const copyNames = element('copy-names', HTMLButtonElement);
 const fieldTools = element('field-tools', HTMLDivElement);
 const fieldButtons = element('field-buttons', HTMLDivElement);
+const inferFirstPage = element('infer-first-page', HTMLInputElement);
+const inferenceSetting = 'bib-formatter.infer-first-page';
+try { inferFirstPage.checked = localStorage.getItem(inferenceSetting) !== 'false'; }
+catch { /* Storage can be unavailable in private or restricted browser contexts. */ }
+inferFirstPage.addEventListener('change', () => {
+  try { localStorage.setItem(inferenceSetting, String(inferFirstPage.checked)); }
+  catch { status.textContent = 'このブラウザでは設定を保存できません。今回の選択は次に開くPDFに適用されます。'; }
+});
+
 let result: Conversion | undefined;
 let inputRevision = 0;
 
@@ -142,10 +151,11 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
   invalidate();
   const revision = inputRevision;
   const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
-  status.textContent = isPdf ? 'PDF のメタデータと1ページ目を読み込んでいます…' : 'ファイルを読み込んでいます…';
+  const useFirstPage = inferFirstPage.checked;
+  status.textContent = isPdf ? (useFirstPage ? 'PDF のメタデータと1ページ目を読み込んでいます…' : 'PDF のメタデータを読み込んでいます…') : 'ファイルを読み込んでいます…';
   try {
     if (isPdf) {
-      const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()));
+      const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()), { inferFirstPage: useFirstPage });
       if (revision !== inputRevision) return;
       source.value = conversion.bib;
       displayResult(conversion);

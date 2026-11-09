@@ -86,7 +86,7 @@ export function metadataToBib(metadata: PdfMetadata): Conversion {
   return conversion;
 }
 
-export async function convertPdf(bytes: Uint8Array): Promise<Conversion> {
+export async function convertPdf(bytes: Uint8Array, { inferFirstPage = true }: { inferFirstPage?: boolean } = {}): Promise<Conversion> {
   let document: PDFDocument;
   try { document = await PDFDocument.load(bytes, { updateMetadata: false }); }
   catch (error) {
@@ -130,7 +130,7 @@ export async function convertPdf(bytes: Uint8Array): Promise<Conversion> {
   metadata.authors = metadata.authors.flatMap(japaneseAuthorList);
   const inferred: string[] = [];
   let textWarning = '';
-  if (!metadata.title || !metadata.authors.length || !metadata.publicationDate) {
+  if (inferFirstPage && (!metadata.title || !metadata.authors.length || !metadata.publicationDate)) {
     try {
       const heading = inferHeading(await firstPageLines(bytes));
       if (!metadata.title && heading.title) { metadata.title = heading.title; inferred.push('タイトル'); }

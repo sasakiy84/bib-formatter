@@ -49,6 +49,10 @@
           <input id="file" type="file" accept=".bib,.bibtex,.pdf,text/plain,application/pdf" aria-label=".bib または PDF ファイルを開く">
           <button id="example" type="button">サンプルを入力</button>
         </div>
+        <div class="toolbar">
+          <label><input id="infer-first-page" type="checkbox" role="switch" checked aria-describedby="inference-help"> PDFの1ページ目から不足情報を推定</label>
+          <small id="inference-help">次に開くPDFに適用します</small>
+        </div>
         <textarea id="source" spellcheck="false" placeholder="@article{key,&#10;  author = {Smith, Jane},&#10;  title = {An Example},&#10;  year = {2024},&#10;}" aria-describedby="privacy"></textarea>
         <div class="toolbar">
           <button id="convert" type="button">biblatex に変換</button>
@@ -83,7 +87,7 @@
       <p>ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは nd、著者なしは Unknown と表示します。</p>
     </details>
   </main>
-  <footer id="privacy">入力内容はブラウザ内で処理します。サーバーへの送信や入力内容の保存は行いません。HTML を保存すればオフラインでも使えます。</footer>
+  <footer id="privacy">入力内容はブラウザ内で処理します。サーバーへの送信や入力内容の保存は行いません。推定設定だけをブラウザに保存します。HTML を保存すればオフラインでも使えます。</footer>
   <!-- APP_SCRIPT -->
 </body>
 </html>

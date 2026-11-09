@@ -199,3 +199,43 @@ test('pasting on the left auto-converts only when the output is empty', async ({
   await expect(output).toHaveValue('@misc{edited,title={Keep My Edits},year=2025}');
   await expect(page.getByLabel('edited', { exact: true })).toHaveValue('2025_Unknown_Keep-My-Edits');
 });
+test('PDF inference defaults on, persists off across reloads and respects the setting', async ({ page }) => {
+  const { makePdf } = await import('../pdf-fixtures');
+  const pdf = Buffer.from(await makePdf({ title: 'Known Title', author: 'Smith, Jane', text: [
+    { text: 'Example Conference (2025)', x: 80, y: 810, size: 10 },
+    { text: 'Known Title', x: 80, y: 740, size: 18 },
+    { text: 'Jane Smith', x: 80, y: 715, size: 12 },
+  ] }));
+  await page.goto('/');
+  const toggle = page.getByRole('switch', { name: 'PDFの1ページ目から不足情報を推定' });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await page.reload();
+  await expect(toggle).not.toBeChecked();
+  await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'toggle.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('nd_Smith_Known-Title');
+  await expect(page.getByLabel('確認する項目')).not.toContainText('推定しました');
+  await toggle.focus();
+  await toggle.press('Space');
+  await page.reload();
+  await expect(toggle).toBeChecked();
+  await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'toggle.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await expect(page.getByLabel('pdf-import', { exact: true })).toHaveValue('2025_Smith_Known-Title');
+  await expect(page.getByLabel('確認する項目')).toContainText('推定しました');
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.screenshot({ path: 'test-results/inference-toggle-390.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+test('PDF inference still works when browser storage is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get: () => { throw new DOMException('Blocked', 'SecurityError'); } });
+  });
+  await page.goto('/');
+  const toggle = page.getByRole('switch', { name: 'PDFの1ページ目から不足情報を推定' });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByRole('status')).toContainText('設定を保存できません');
+  await page.getByRole('textbox', { name: '変換した biblatex' }).fill('@misc{x,title={Still Works}}');
+  await expect(page.getByLabel('x', { exact: true })).toHaveValue('nd_Unknown_Still-Works');
+});
