@@ -202,7 +202,7 @@ for (const width of [1280, 390]) {
     if (!type || !change) throw new Error('Type controls not visible');
     expect(Math.abs(type.y - change.y)).toBeLessThanOrEqual(1);
     expect(Math.abs(type.height - change.height)).toBeLessThanOrEqual(1);
-    const files = page.getByRole('region', { name: '文献とファイル名' });
+    const files = page.getByRole('region', { name: 'ファイル名', exact: true });
     await expect(files.getByRole('combobox')).toHaveCount(0);
     await expect(files).not.toContainText('Year_Authors_Title');
     for (const key of ['turing1936', 'nakaya1938', 'sample2024']) {

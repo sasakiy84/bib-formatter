@@ -34,6 +34,7 @@
     .pane { min-width: 0; display: grid; grid-template-rows: subgrid; grid-row: span 4; }
     .pane-actions, .pane > .toolbar { align-self: start; }
     textarea { display: block; box-sizing: border-box; width: 100%; min-height: 25rem; padding: .85rem; resize: vertical; font: .9rem/1.6 ui-monospace, monospace; tab-size: 2; }
+    #filename-section { margin-bottom: 2rem; }
     .result-head { display: flex; align-items: baseline; gap: 1rem; }
     #status:empty { display: none; }
     #warnings { padding: 1rem 1rem 1rem 2.5rem; border: 1px solid GrayText; }
@@ -52,6 +53,10 @@
     <p>.bib や PDF から、biblatex と文献のファイル名を作成。</p>
   </header>
   <main>
+    <section id="filename-section" aria-labelledby="filenames-title">
+      <div class="result-head"><h2 id="filenames-title">ファイル名</h2><button id="copy-names" disabled>すべてコピー</button></div>
+      <div id="filenames"></div>
+    </section>
     <div class="panes">
       <section class="pane" aria-labelledby="input-title">
         <h2 id="input-title"><label for="source">入力する .bib</label></h2>
@@ -95,10 +100,6 @@
     </div>
     <p id="status" role="status" aria-live="polite"></p>
     <ul id="warnings" aria-label="確認する項目"></ul>
-    <section aria-labelledby="filenames-title">
-      <div class="result-head"><h2 id="filenames-title">文献とファイル名</h2><button id="copy-names" disabled>すべてコピー</button></div>
-      <div id="filenames"></div>
-    </section>
     <details>
       <summary>変換ルール</summary>
       <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。紙面からの推定や OCR は行いません。</p>
