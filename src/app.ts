@@ -22,6 +22,33 @@ const fieldButtons = element('field-buttons', HTMLDivElement);
 const language = element('language', HTMLSelectElement);
 const otherLanguage = element('other-language', HTMLInputElement);
 const otherLanguageLabel = element('other-language-label', HTMLLabelElement);
+const tabs = [element('converter-tab', HTMLButtonElement), element('prompt-tab', HTMLButtonElement)];
+const panels = [element('converter-panel', HTMLDivElement), element('prompt-panel', HTMLDivElement)];
+function selectTab(index: number): void {
+  tabs.forEach((tab, tabIndex) => {
+    const selected = tabIndex === index;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    panels[tabIndex]!.hidden = !selected;
+  });
+}
+tabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => selectTab(index));
+  tab.addEventListener('keydown', event => {
+    let nextIndex: number;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (index + tabs.length - 1) % tabs.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    selectTab(nextIndex);
+    tabs[nextIndex]!.focus();
+  });
+});
+const llmPrompt = element('llm-prompt', HTMLTextAreaElement);
+const promptStatus = element('prompt-status', HTMLParagraphElement);
+element('copy-prompt', HTMLButtonElement).addEventListener('click', () => void copyText(llmPrompt.value, llmPrompt, promptStatus));
 function selectedLanguage(): string {
   return language.value === 'other' ? otherLanguage.value.trim() : language.value;
 }
@@ -46,13 +73,13 @@ function invalidate(preserveOutput = false): void {
   copy.disabled = download.disabled = copyNames.disabled = true;
   status.textContent = '';
 }
-async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputElement): Promise<void> {
+async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputElement, feedback: HTMLElement = status): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
-    status.textContent = '';
+    feedback.textContent = '';
   } catch {
     fallback.focus(); fallback.select();
-    status.textContent = 'コピーする内容を選択しました。Ctrl+C / ⌘C でコピーしてください。';
+    feedback.textContent = 'コピーする内容を選択しました。Ctrl+C / ⌘C でコピーしてください。';
   }
 }
 function sourceChanged(): void {

@@ -1,6 +1,37 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [1280, 390]) {
+  test(`LLM prompt tab copies instructions and preserves edited bib at ${width}px`, async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    const editedBib = '@book{夏目1914, author={夏目, 漱石}, title={こころ}, date={1914}}';
+    await page.getByRole('textbox', { name: '変換した biblatex' }).fill(editedBib);
+    const converterTab = page.getByRole('tab', { name: '変換', exact: true });
+    const promptTab = page.getByRole('tab', { name: 'LLM用プロンプト', exact: true });
+    await promptTab.click();
+    await expect(promptTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tabpanel', { name: '変換', exact: true })).not.toBeVisible();
+    const prompt = page.getByRole('textbox', { name: 'LLM用プロンプト', exact: true });
+    await expect(prompt).toHaveValue(/^以下の書誌情報をルールに則って biblatex フォーマットにして、コードブロックで出力してください。/);
+    await page.getByRole('button', { name: 'プロンプトをコピー', exact: true }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await prompt.inputValue());
+    await page.screenshot({ path: `test-results/prompt-${width}.png`, fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await promptTab.focus();
+    await promptTab.press('ArrowRight');
+    await expect(converterTab).toBeFocused();
+    await expect(converterTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(editedBib);
+    await expect(page.getByLabel('夏目1914', { exact: true })).toHaveValue('1914_夏目_こころ');
+    await converterTab.press('End');
+    await expect(promptTab).toBeFocused();
+    await promptTab.press('Home');
+    await expect(converterTab).toBeFocused();
+  });
+}
+
+for (const width of [1280, 390]) {
   test(`sample converts, downloads and stays usable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     const errors: string[] = [];
