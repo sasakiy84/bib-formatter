@@ -1,5 +1,6 @@
+import { fieldLabel } from './field-actions';
 import { convertPdf } from './pdf';
-import { addCommonField, commonFields, changeEntryType, convertBib, type Conversion } from './formatter';
+import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, type Conversion } from './formatter';
 import { exampleBib } from './examples';
 
 function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
@@ -89,24 +90,42 @@ function displayResult(conversion: Conversion, writeOutput = true): void {
   fieldTools.hidden = result.entries.length !== 1;
   const singleEntry = result.entries.length === 1 ? result.entries[0] : undefined;
   if (singleEntry) {
-    for (const [field, label] of commonFields) {
-      const button = document.createElement('button');
-      button.type = 'button'; button.textContent = `${label}を追加`; button.title = field;
-      button.disabled = singleEntry.fields[field] !== undefined;
-      if (field === 'date' && singleEntry.fields.year !== undefined) button.disabled = true;
-      button.addEventListener('click', () => {
-        if (!result) return;
-        try {
-          const updated = addCommonField(result.bib, field);
-          invalidate(); displayResult(updated);
-          const caret = output.value.indexOf(`  ${field} = {`) + `  ${field} = {`.length;
-          output.focus(); output.setSelectionRange(caret, caret);
-
-        } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
-      });
-      fieldButtons.append(button);
+    const actions = getSingleEntryFieldActions(result.bib);
+    for (const [heading, groups, removing] of [
+      ['必須', actions.required, false],
+      ['任意', actions.optional.map(field => [field]), false],
+      ['削除', actions.remove.map(field => [field]), true],
+    ] as const) {
+      if (!groups.length) continue;
+      const section = document.createElement('fieldset'); section.className = 'field-group';
+      const legend = document.createElement('legend'); legend.textContent = heading; section.append(legend);
+      for (const fields of groups) {
+        const row = document.createElement('div'); row.className = 'field-options';
+        if (fields.length > 1) {
+          const alternative = document.createElement('span'); alternative.textContent = `${fields.map(fieldLabel).join('／')}のいずれか`;
+          row.append(alternative);
+        }
+        for (const field of fields) {
+          const label = fieldLabel(field);
+          const button = document.createElement('button'); button.type = 'button';
+          button.textContent = `${label}を${removing ? '削除' : '追加'}`; button.title = field;
+          button.addEventListener('click', () => {
+            if (!result) return;
+            try {
+              const updated = removing ? removeEntryField(result.bib, field) : addCommonField(result.bib, field);
+              const caret = removing ? output.selectionStart : updated.bib.indexOf(`  ${field} = {`) + `  ${field} = {`.length;
+              invalidate(); displayResult(updated);
+              output.focus(); output.setSelectionRange(caret, caret);
+            } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+          });
+          row.append(button);
+        }
+        section.append(row);
+      }
+      fieldButtons.append(section);
     }
   }
+
   status.textContent = '';
   const messages = result.warnings;
   for (const message of messages) { const li = document.createElement('li'); li.textContent = message; warnings.append(li); }

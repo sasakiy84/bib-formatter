@@ -153,12 +153,12 @@ test('single-entry field buttons insert a field and place the caret in its value
   await page.goto('/');
   const output = page.getByRole('textbox', { name: '変換した biblatex' });
   await output.fill('@misc{x,title={Editable},author={Smith, Jane}}');
-  await expect(page.getByRole('button', { name: 'タイトルを追加', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'タイトルを追加', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '出版年月日を追加', exact: true }).click();
   await expect(output).toBeFocused();
   await output.pressSequentially('2027');
   await expect(page.getByLabel('x', { exact: true })).toHaveValue('2027_Smith_Editable');
-  await expect(page.getByRole('button', { name: '出版年月日を追加', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '出版年月日を追加', exact: true })).toHaveCount(0);
   await page.screenshot({ path: 'test-results/editing-fields-390.png', fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -302,4 +302,38 @@ test('empty bibtex query parameter leaves the editors empty', async ({ page }) =
   await expect(page.getByRole('textbox', { name: '入力する .bib' })).toHaveValue('');
   await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue('');
   await expect(page.getByRole('status')).not.toBeVisible();
+});
+
+test('field controls are grouped by type and additions disappear after use', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/');
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await output.fill('@article{x,title={Title},author={Smith, Jane},date={2024},booktitle={Wrong},publisher={Wrong publisher},_tags={keep}}');
+  await expect(page.getByRole('group', { name: '必須', exact: true }).getByRole('button', { name: '掲載誌を追加' })).toBeVisible();
+  await expect(page.getByRole('group', { name: '任意', exact: true }).getByRole('button', { name: 'DOIを追加' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'タイトルを追加', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'タグ（ユーザー定義）を追加', exact: true })).toHaveCount(0);
+  await page.getByRole('group', { name: '削除', exact: true }).getByRole('button', { name: '会議名・収録書名を削除' }).click();
+  await expect(output).not.toHaveValue(/booktitle/);
+  await expect(output).toHaveValue(/publisher = \{Wrong publisher\}/);
+  await expect(output).toHaveValue(/_tags = \{keep\}/);
+  await page.getByRole('button', { name: '掲載誌を追加', exact: true }).click();
+  await expect(page.getByRole('button', { name: '掲載誌を追加', exact: true })).toHaveCount(0);
+  await expect(output).toBeFocused();
+  await output.pressSequentially('Journal');
+  await expect(output).toHaveValue(/journaltitle = \{Journal\}/);
+  await page.screenshot({ path: 'test-results/field-categories-390.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+test('changing entry type updates required and deletion candidates without deleting fields automatically', async ({ page }) => {
+  await page.goto('/');
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await output.fill('@article{x,title={Title},author={Smith, Jane},date={2024},journaltitle={Keep until deleted}}');
+  await page.getByRole('combobox', { name: 'x の文献種別' }).selectOption('thesis');
+  await page.getByRole('button', { name: 'x の種別を変更', exact: true }).click();
+  await expect(page.getByRole('group', { name: '必須', exact: true }).getByRole('button', { name: '所属機関を追加' })).toBeVisible();
+  await expect(page.getByRole('group', { name: '削除', exact: true }).getByRole('button', { name: '掲載誌を削除' })).toBeVisible();
+  await expect(output).toHaveValue(/journaltitle = \{Keep until deleted\}/);
+  await page.getByRole('button', { name: '掲載誌を削除', exact: true }).click();
+  await expect(output).not.toHaveValue(/journaltitle/);
 });

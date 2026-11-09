@@ -1,10 +1,11 @@
+import { canonicalFieldName, getFieldActions, supportedFields } from './field-actions';
 import { japaneseAuthorList } from './authors';
 import { parse, parseVerbatim, type VerbatimEntry, type Creator } from '@retorquere/bibtex-parser/js';
 
 const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher location institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid crossref xref xdata related relatedtype entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
-const retained = new Set(fieldOrder);
+const retained = new Set([...fieldOrder, ...supportedFields]);
 const typeAliases: Record<string, string> = { conference: 'inproceedings', techreport: 'report', phdthesis: 'thesis', mastersthesis: 'thesis', electronic: 'online', www: 'online' };
-const fieldAliases: Record<string, string> = { journal: 'journaltitle', address: 'location', school: 'institution', archiveprefix: 'eprinttype', primaryclass: 'eprintclass' };
+
 
 export interface FormattedEntry {
   key: string;
@@ -80,7 +81,7 @@ export function convertBib(input: string, { generateKeys = true, language }: { g
     const fields: Record<string, string> = Object.create(null);
     const removed: string[] = [];
     for (const [name, value] of Object.entries(source)) {
-      const target = fieldAliases[name] ?? name;
+      const target = canonicalFieldName(name);
       if (target.startsWith('_') || retained.has(target)) {
         if (target !== name && source[target] !== undefined) {
           if (source[target] !== value) warnings.push(`${entry.key}: ${name} と ${target} が異なるため ${target} を優先しました。`);
@@ -162,23 +163,37 @@ export function changeEntryType(input: string, key: string, selection: string, e
   if (entry.type === 'thesis' && selection !== 'thesis') entry.fields.type = selection;
   else if (['phdthesis', 'mathesis'].includes(entry.fields.type ?? '')) delete entry.fields.type;
   const preambles = library.preambles.map(value => `@preamble{${value}}`);
-  return convertBib([...preambles, ...library.entries.map(serialize)].join('\n\n'));
+  const bib = [...preambles, ...library.entries.map(serialize)].join('\n\n') + '\n';
+  return { ...convertBib(bib, { generateKeys: false }), bib };
 }
 
-export const commonFields: readonly (readonly [string, string])[] = [
-  ['title', 'タイトル'], ['author', '著者'], ['date', '出版年月日'], ['language', '言語'], ['journaltitle', '掲載誌'],
-  ['booktitle', '会議名・収録書名'], ['publisher', '出版社'], ['editor', '編者'],
-  ['volume', '巻'], ['number', '号'], ['pages', 'ページ'], ['doi', 'DOI'], ['url', 'URL'], ['urldate', 'アクセス日'],
-  ['_tags', 'タグ（ユーザー定義）'], ['_notes', 'ノート（ユーザー定義）'],
-];
-
 export function addCommonField(input: string, field: string): Conversion {
-  if (!commonFields.some(([name]) => name === field)) throw new Error('追加できないフィールドです。');
   const library = parseVerbatim(input);
   if (library.errors.length || library.entries.length !== 1) throw new Error('フィールドの追加は正しい bib が1件のときに使えます。');
   const entry = library.entries[0]!;
   if (entry.fields[field] !== undefined) throw new Error('このフィールドは追加済みです。');
+  const actions = getFieldActions(entry.type, entry.fields);
+  if (![...actions.required.flat(), ...actions.optional].includes(field)) throw new Error('この種別には追加できないフィールドです。');
   entry.fields[field] = '';
   const preambles = library.preambles.map(value => `@preamble{${value}}`);
-  return convertBib([...preambles, serialize(entry)].join('\n\n'));
+  const bib = [...preambles, serialize(entry)].join('\n\n') + '\n';
+  return { ...convertBib(bib, { generateKeys: false }), bib };
+}
+
+export function getSingleEntryFieldActions(input: string): ReturnType<typeof getFieldActions> {
+  const library = parseVerbatim(input);
+  if (library.errors.length || library.entries.length !== 1) throw new Error('フィールド操作は正しい bib が1件のときに使えます。');
+  const entry = library.entries[0]!;
+  return getFieldActions(entry.type, entry.fields);
+}
+
+export function removeEntryField(input: string, field: string): Conversion {
+  const library = parseVerbatim(input);
+  if (library.errors.length || library.entries.length !== 1) throw new Error('フィールド操作は正しい bib が1件のときに使えます。');
+  const entry = library.entries[0]!;
+  if (!getFieldActions(entry.type, entry.fields).remove.includes(field)) throw new Error('このフィールドは種別に対応しています。');
+  delete entry.fields[field];
+  const preambles = library.preambles.map(value => `@preamble{${value}}`);
+  const bib = [...preambles, serialize(entry)].join('\n\n') + '\n';
+  return { ...convertBib(bib, { generateKeys: false }), bib };
 }

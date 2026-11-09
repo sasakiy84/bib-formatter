@@ -24,7 +24,9 @@
     #entry-tools select { width: 100%; min-width: 0; }
     #entry-tools select, #entry-tools button { box-sizing: border-box; height: 2.75rem; margin: 0; }
     #entry-tools button { white-space: nowrap; }
-    #field-tools p { margin-bottom: 0; }
+    .field-group { min-width: 0; margin: .8rem 0; padding: .6rem; }
+    .field-options { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .2rem .4rem .2rem 0; }
+    .field-options button { font-size: .85rem; padding: .3rem .55rem; }
     button { padding: .4rem .85rem; cursor: pointer; }
     button:disabled { cursor: default; }
     input[type=file] { max-width: 100%; }
@@ -86,8 +88,7 @@
         <div class="editor-tools">
         <div id="entry-tools" aria-label="文献種別の編集"></div>
         <div id="field-tools" hidden>
-          <p>フィールドを追加</p>
-          <div id="field-buttons" class="toolbar" aria-label="フィールドを追加"></div>
+          <div id="field-buttons" aria-label="フィールド操作"></div>
         </div>
         </div>
       </section>
@@ -102,7 +103,7 @@
       <summary>変換ルール</summary>
       <p>PDF は文書情報と XMP メタデータから著者・タイトル・出版日・掲載誌・DOI を読み取って変換します。XMP を優先し、出版日のない PDF は年なしとして出力します。PDF の作成日・更新日は出版年として使いません。紙面からの推定や OCR は行いません。</p>
       <p>既存の引用キーと LaTeX の大文字保護・数式を保持し、フィールド名・並び順・波括弧の形式を統一します。journal → journaltitle、address → location、school → institution、year / month → date など、BibTeX の表記を biblatex に寄せます。</p>
-      <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子・文献間の参照と、アンダーバー（_）で始まる独自フィールドを残します。abstract・keywords・file・メモなどは削除します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
+      <p>著者・タイトル・出版情報・ページ・DOI・URL・識別子・文献間の参照と、アンダーバー（_）で始まる独自フィールドを残します。abstract・keywords・fileなどの管理用フィールドは削除します。@string は展開し、@preamble は保持します。欠けた情報は補いません。</p>
       <p>空の引用キーは、変換時に第一著者の姓＋出版年（例：山田2026）で補います。著者または出版年が分からない場合は空欄のままにします。</p>
       <p>ファイル名は Year_Authors_Title の形式で、拡張子は付けません。著者は最大3人で、4人以上は et-al を付けます。ファイル名には著者の姓（著者がなければ編者）を使います。日本語の姓名を分けたい場合は「姓, 名」で入力してください。空白とファイル名に使えない文字はハイフンにし、長すぎる名前は UTF-8 で240バイト以内に短縮します。出版年なしは nd、著者なしは Unknown と表示します。</p>
     </details>

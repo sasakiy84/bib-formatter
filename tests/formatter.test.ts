@@ -1,6 +1,7 @@
+import { getFieldActions } from '../src/field-actions';
 import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename } from '../src/formatter';
+import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename, removeEntryField } from '../src/formatter';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
@@ -34,7 +35,8 @@ describe('biblatex conversion', () => {
     const entry = first('@misc{x,title={Test},_memo={日本語 {メモ}},_file={paper.pdf},abstract={Long abstract},keywords={tag},file={/secret/local.pdf},note={private}}');
     expect(entry.fields._memo).toBe('日本語 {メモ}');
     expect(entry.fields._file).toBe('paper.pdf');
-    expect(entry.removed).toEqual(['abstract', 'keywords', 'file', 'note']);
+    expect(entry.fields.note).toBe('private');
+    expect(entry.removed).toEqual(['abstract', 'keywords', 'file']);
   });
   test('canonical biblatex fields take precedence over conflicting aliases', () => {
     const converted = convertBib('@article{x,journal={Old},journaltitle={New},year=2023,date={2024-05}}');
@@ -188,4 +190,52 @@ test('other languages can be named explicitly or left unspecified', () => {
   expect(convertBib('@misc{x,title={Test}}', { language: 'french' }).entries[0]?.fields.language).toBe('french');
   expect(convertBib('@misc{x,title={Test},language={english}}', { language: '' }).entries[0]?.fields.language).toBe('');
   expect(() => convertBib('@misc{x,title={Test}}', { language: '{invalid}' })).toThrow('言語名');
+});
+
+test('article fields distinguish required journal title from optional DOI and incompatible book title', () => {
+  const actions = getFieldActions('article', { title: 'Title', author: 'Smith, Jane', date: '2024', booktitle: 'Wrong', publisher: 'Wrong publisher', _tags: 'keep' });
+  expect(actions.required).toEqual([['journaltitle']]);
+  expect(actions.optional).toContain('doi');
+  expect(actions.optional).toContain('_notes');
+  expect(actions.optional).not.toContain('_tags');
+  expect(actions.optional).not.toContain('title');
+  expect(actions.remove).toEqual(['booktitle', 'publisher']);
+});
+test('book and thesis use the required fields from the standard biblatex styles', () => {
+  expect(getFieldActions('book', { editor: 'Smith, Jane', title: 'Book', year: '2024' }).required).toEqual([['author']]);
+  const thesis = getFieldActions('thesis', { author: 'Smith, Jane', title: 'Thesis', date: '2024' });
+  expect(thesis.required).toEqual([['type'], ['institution']]);
+});
+test('alternative required fields are satisfied by editor, year or DOI', () => {
+  const actions = getFieldActions('online', { editor: 'Editor', title: 'Page', year: '2024', doi: '10.1234/x' });
+  expect(actions.required).toEqual([]);
+  expect(actions.optional).toContain('author');
+  expect(actions.optional).toContain('url');
+  expect(actions.optional).not.toContain('date');
+  expect(getFieldActions('online', { title: 'Page' }).required).toContainEqual(['doi', 'eprint', 'url']);
+});
+test('valid optional fields survive conversion and can be added for their type', () => {
+  const added = addCommonField('@article{x,title={T},author={A},date={2024}}', 'addendum');
+  expect(added.entries[0]?.fields.addendum).toBe('');
+  expect(() => addCommonField(added.bib, 'booktitle')).toThrow('種別');
+});
+test('removes only the selected incompatible field and keeps custom data and preambles', () => {
+  const input = '@preamble{"test"} @article{x,title={T},booktitle={Wrong},institution={Also wrong},_tags={keep},_notes={private}}';
+  const removed = removeEntryField(input, 'booktitle');
+  expect(removed.bib).not.toContain('booktitle');
+  expect(removed.bib).toContain('institution = {Also wrong}');
+  expect(removed.entries[0]?.fields._tags).toBe('keep');
+  expect(parseVerbatim(removed.bib).preambles).toEqual(['"test"']);
+  expect(() => removeEntryField(removed.bib, 'title')).toThrow('対応');
+  expect(() => removeEntryField(removed.bib, '_notes')).toThrow('対応');
+});
+test('custom types do not suggest destructive type-specific removals', () => {
+  expect(getFieldActions('customa', { institution: 'Keep', special: 'Keep' }).remove).toEqual([]);
+});
+
+test('changing type preserves incompatible and unknown fields for explicit removal', () => {
+  const changed = changeEntryType('@book{x,title={T},publisher={Keep},special={Also keep}}', 'x', 'article');
+  expect(changed.bib).toContain('publisher = {Keep}');
+  expect(changed.bib).toContain('special = {Also keep}');
+  expect(removeEntryField(changed.bib, 'special').bib).toContain('publisher = {Keep}');
 });
