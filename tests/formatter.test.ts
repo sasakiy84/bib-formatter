@@ -1,22 +1,35 @@
 import { getFieldActions } from '../src/field-actions';
 import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
-import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename, removeEntryField, stampDownloadDate } from '../src/formatter';
+import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename, removeEntryField } from '../src/formatter';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
   if (!entry) throw new Error('No entry');
   return entry;
 }
-test('download date updates every entry without changing edited keys, custom fields or preambles', () => {
-  const stamped = stampDownloadDate('@preamble{"Keep"} @article{edited,author={Linell, Per},date={2019},_download_at={2020-01-01},_notes={Keep},custom={Also keep}} @misc{,title={Other}}', new Date(2026, 0, 9, 0, 30));
-  const library = parseVerbatim(stamped.bib);
-  expect(library.entries.map(entry => entry.fields._download_at)).toEqual(['2026-01-09', '2026-01-09']);
-  expect(library.entries.map(entry => entry.key)).toEqual(['edited', '']);
-  expect(library.entries[0]?.fields._notes).toBe('Keep');
-  expect(library.entries[0]?.fields.custom).toBe('Also keep');
-  expect(library.preambles).toEqual(['"Keep"']);
-  expect(stampDownloadDate(stamped.bib, new Date(2026, 0, 10)).entries.map(entry => entry.fields._download_at)).toEqual(['2026-01-10', '2026-01-10']);
+test('conversion removes location, its address alias and download dates while retaining other custom fields', () => {
+  const converted = first('@book{book,author={山田, 太郎},date={2026},location={東京},address={大阪},_download_at={2020-01-01},_notes={Keep},_tags={Tag},_memo={Memo}}');
+  expect(converted.fields.location).toBeUndefined();
+  expect(converted.fields.address).toBeUndefined();
+  expect(converted.fields._download_at).toBeUndefined();
+  expect(converted.removed).toEqual(['location', 'address', '_download_at']);
+  expect(converted.fields._notes).toBe('Keep');
+  expect(converted.fields._tags).toBe('Tag');
+  expect(converted.fields._memo).toBe('Memo');
+});
+test('ten-name author, editor and translator lists fit on one line without splitting corporate names', () => {
+  const names = [...Array.from({ length: 9 }, (_, index) => `Surname${index}, Given${index}`), '{Research and Development Group}'];
+  const list = names.join('\n and\n ');
+  const converted = convertBib(`@book{names,author={${list}},editor={${list}},translator={${list}},date={2026}}`);
+  for (const field of ['author', 'editor', 'translator']) expect(converted.bib).toContain(`  ${field} = {${names.join(' and ')}},`);
+});
+test('eleven-name lists wrap by creator and remain stable after repeated conversion', () => {
+  const names = [...Array.from({ length: 10 }, (_, index) => `Surname${index}, Given${index}`), '{Research and Development Group}'];
+  const converted = convertBib(`@book{names,author={${names.join(' and ')}},date={2026}}`);
+  expect(converted.bib).toContain(`  author = {\n    ${names.join('\n    and ')}\n  },`);
+  expect(convertBib(converted.bib).bib).toBe(converted.bib);
+  expect(converted.entries[0]?.fields.author).toBe(names.join(' and '));
 });
 describe('biblatex conversion', () => {
   test('English journal article converts aliases, date, DOI and page ranges', () => {
@@ -26,7 +39,7 @@ describe('biblatex conversion', () => {
   test('Japanese book retains text and publication fields', () => {
     const entry = first('@book{中谷1938, author={中谷, 宇吉郎},title={雪},publisher={岩波書店},address={東京},year=1938,language={japanese}}');
     expect(entry.filename).toBe('1938_中谷_雪');
-    expect(entry.fields.location).toBe('東京');
+    expect(entry.fields.location).toBeUndefined();
     expect(entry.fields.publisher).toBe('岩波書店');
   });
   test('Japanese conference paper preserves multiple names and protected title', () => {

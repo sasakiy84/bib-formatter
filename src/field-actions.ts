@@ -27,12 +27,12 @@ export function fieldLabel(field: string): string { return labels[field] ?? fiel
 
 const sharedOptional = ['_tags', '_notes'];
 const basicOptional = new Set(['author', 'editor', 'title', 'date', 'language', 'journaltitle', 'booktitle', 'publisher', 'institution', 'type', 'volume', 'number', 'pages', 'doi', 'url', 'urldate', 'isbn', 'edition', '_tags', '_notes']);
-const excluded = new Set(['abstract', 'annotation', 'keywords', 'file', 'library', 'execute', 'note', 'crossref', 'xref', 'xdata', 'related', 'relatedtype', 'relatedoptions', 'relatedstring', 'entryset', 'ids']);
+export const excludedFields = new Set(['abstract', 'annotation', 'keywords', 'file', 'library', 'execute', 'note', 'location', '_download_at', 'crossref', 'xref', 'xdata', 'related', 'relatedtype', 'relatedoptions', 'relatedstring', 'entryset', 'ids']);
 const legacyDates = new Set(['year', 'month', 'day']);
 export const supportedFields = [...new Set([
   ...definitions.globalFields,
   ...Object.values(types).flatMap(type => [...type.required.flat(), ...type.optional, ...type.allowed]),
-])].filter(field => !excluded.has(field));
+])].filter(field => !excludedFields.has(field));
 
 export interface FieldActions { required: string[][]; optional: string[]; remove: string[] }
 export function getFieldActions(type: string, source: Record<string, string>): FieldActions {
@@ -40,7 +40,7 @@ export function getFieldActions(type: string, source: Record<string, string>): F
   const schema = types[normalizedType];
   const fields = new Set(Object.keys(source).map(canonicalFieldName));
   const has = (field: string): boolean => fields.has(field) || (field === 'date' && fields.has('year'));
-  const usable = (field: string): boolean => !excluded.has(field) && !legacyDates.has(field);
+  const usable = (field: string): boolean => !excludedFields.has(field) && !legacyDates.has(field);
   // Unknown/custom styles have no reliable type-specific exclusion list.
   if (!schema) return { required: [], optional: ['author', 'editor', 'title', 'date', 'language', 'journaltitle', 'booktitle', 'publisher', 'volume', 'number', 'pages', 'doi', 'url', 'urldate', '_tags', '_notes'].filter(field => !has(field)), remove: [] };
   const required = schema.required.filter(group => !group.some(has)).map(group => group.filter(usable)).filter(group => group.length);

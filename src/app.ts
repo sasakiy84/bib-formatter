@@ -1,6 +1,6 @@
 import { fieldLabel } from './field-actions';
 import { convertPdf } from './pdf';
-import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, stampDownloadDate, type Conversion } from './formatter';
+import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, type Conversion } from './formatter';
 import { exampleBib } from './examples';
 
 function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
@@ -245,7 +245,6 @@ copyNames.addEventListener('click', async () => {
 });
 download.addEventListener('click', () => {
   if (!result) return;
-  displayResult(stampDownloadDate(result.bib));
   const url = URL.createObjectURL(new Blob([result.bib], { type: 'application/x-bibtex;charset=utf-8' }));
   const key = (result.entries[0]?.key || 'references').replace(/[<>:"/\\|?*\p{Cc}\p{Cf}]/gu, '-');
   const link = document.createElement('a'); link.href = url; link.download = `_${key}.bib`; link.click();

@@ -1,8 +1,8 @@
-import { canonicalFieldName, getFieldActions, supportedFields } from './field-actions';
+import { canonicalFieldName, excludedFields, getFieldActions, supportedFields } from './field-actions';
 import { japaneseAuthorList } from './authors';
 import { parse, parseVerbatim, type VerbatimEntry, type Creator } from '@retorquere/bibtex-parser/js';
 
-const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher location institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
+const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
 const retained = new Set([...fieldOrder, ...supportedFields]);
 const typeAliases: Record<string, string> = { conference: 'inproceedings', techreport: 'report', phdthesis: 'thesis', mastersthesis: 'thesis', electronic: 'online', www: 'online' };
 
@@ -16,12 +16,34 @@ export interface FormattedEntry {
 }
 export interface Conversion { bib: string; entries: FormattedEntry[]; warnings: string[] }
 
+const nameFields = new Set(['author', 'editor', 'translator', 'bookauthor', 'editora', 'editorb', 'editorc', 'shortauthor', 'shorteditor', 'annotator', 'commentator', 'introduction', 'foreword', 'afterword', 'namea', 'nameb', 'namec', 'sortname']);
+function formatNames(value: string): string {
+  const names: string[] = [];
+  let depth = 0, start = 0;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (character === '\\') { index++; continue; }
+    if (character === '{') depth++;
+    else if (character === '}') depth--;
+    if (depth || !/\s/.test(character ?? '')) continue;
+    const separator = value.slice(index).match(/^\s+and\s+/i);
+    if (!separator) continue;
+    names.push(value.slice(start, index).replace(/\s+/g, ' ').trim());
+    index += separator[0].length - 1;
+    start = index + 1;
+  }
+  names.push(value.slice(start).replace(/\s+/g, ' ').trim());
+  return names.filter(name => !/^others$/i.test(name)).length <= 10
+    ? names.join(' and ')
+    : `\n    ${names.join('\n    and ')}\n  `;
+}
+
 export function serialize(entry: Pick<VerbatimEntry, 'type' | 'key' | 'fields'>): string {
   const names = Object.keys(entry.fields).sort((a, b) => {
     const ai = fieldOrder.indexOf(a), bi = fieldOrder.indexOf(b);
     return (ai < 0 ? fieldOrder.length : ai) - (bi < 0 ? fieldOrder.length : bi) || a.localeCompare(b, 'en');
   });
-  return `@${entry.type}{${entry.key},\n${names.map(name => `  ${name} = {${entry.fields[name]}},`).join('\n')}\n}`;
+  return `@${entry.type}{${entry.key},\n${names.map(name => `  ${name} = {${nameFields.has(name) ? formatNames(entry.fields[name]!) : entry.fields[name]}},`).join('\n')}\n}`;
 }
 
 // Filename-only cleanup; the bibliography retains original LaTeX and case-protection braces.
@@ -99,7 +121,7 @@ export function convertBib(input: string, { generateKeys = true, language }: { g
     const removed: string[] = [];
     for (const [name, value] of Object.entries(source)) {
       const target = canonicalFieldName(name);
-      if (target.startsWith('_') || retained.has(target)) {
+      if (!excludedFields.has(target) && (target.startsWith('_') || retained.has(target))) {
         if (target !== name && source[target] !== undefined) {
           if (source[target] !== value) warnings.push(`${entry.key}: ${name} と ${target} が異なるため ${target} を優先しました。`);
           continue;
@@ -162,16 +184,6 @@ export function changeEntryType(input: string, key: string, selection: string, e
   const bib = [...preambles, ...library.entries.map(serialize)].join('\n\n') + '\n';
   const converted = convertBib(bib, { generateKeys: false });
   return { ...converted, warnings: [...warnings, ...converted.warnings], bib };
-}
-
-export function stampDownloadDate(input: string, downloadedAt: Date = new Date()): Conversion {
-  const library = parseVerbatim(input);
-  if (library.errors.length || !library.entries.length) throw new Error('bib を読み込めません。');
-  const date = [String(downloadedAt.getFullYear()).padStart(4, '0'), String(downloadedAt.getMonth() + 1).padStart(2, '0'), String(downloadedAt.getDate()).padStart(2, '0')].join('-');
-  for (const entry of library.entries) entry.fields._download_at = date;
-  const preambles = library.preambles.map(value => `@preamble{${value}}`);
-  const bib = [...preambles, ...library.entries.map(serialize)].join('\n\n') + '\n';
-  return { ...convertBib(bib, { generateKeys: false }), bib };
 }
 
 export function addCommonField(input: string, field: string): Conversion {

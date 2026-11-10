@@ -1,27 +1,24 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
-test.describe('download date', () => {
-  test.use({ timezoneId: 'Asia/Tokyo' });
-  test('saved bib records the local download day and updates the editor and previous date', async ({ page }) => {
-    await page.goto('/');
-    const output = page.getByRole('textbox', { name: '変換した biblatex' });
-    await output.fill('@article{edited,author={Linell, Per},date={2019},_download_at={2020-01-01},_notes={Keep}}');
-    for (const [time, date] of [['2026-11-08T15:30:00Z', '2026-11-09'], ['2026-11-09T15:30:00Z', '2026-11-10']]) {
-      await page.clock.setFixedTime(new Date(time!));
-      const pending = page.waitForEvent('download');
-      await page.getByRole('button', { name: '.bib を保存' }).click();
-      const downloaded = await pending;
-      expect(downloaded.suggestedFilename()).toBe('_edited.bib');
-      const path = await downloaded.path();
-      if (!path) throw new Error('Downloaded file is unavailable');
-      const bib = await readFile(path, 'utf8');
-      expect(bib).toContain(`_download_at = {${date}}`);
-      expect(bib.match(/_download_at\s*=/g)).toHaveLength(1);
-      expect(bib).toContain('_notes = {Keep}');
-      await expect(output).toHaveValue(bib);
-    }
-  });
+test('conversion and download exclude location, address and download dates', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '入力する .bib' }).fill('@article{Linell2019,author={Linell, Per},date={2019},location={London},address={Oxford},_download_at={2020-01-01},_notes={Keep}}');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await expect(output).not.toHaveValue(/(?:location|address|_download_at)\s*=/);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const pending = page.waitForEvent('download');
+    await page.getByRole('button', { name: '.bib を保存' }).click();
+    const downloaded = await pending;
+    expect(downloaded.suggestedFilename()).toBe('_Linell2019.bib');
+    const path = await downloaded.path();
+    if (!path) throw new Error('Downloaded file is unavailable');
+    const bib = await readFile(path, 'utf8');
+    expect(bib).not.toMatch(/(?:location|address|_download_at)\s*=/);
+    expect(bib).toContain('_notes = {Keep}');
+    await expect(output).toHaveValue(bib);
+  }
 });
 
 for (const width of [1280, 390]) {
