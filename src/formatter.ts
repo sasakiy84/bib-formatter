@@ -104,8 +104,9 @@ function normalizeCitationKeys(entries: Pick<VerbatimEntry, 'type' | 'key' | 'fi
   }
 }
 
-export function convertBib(input: string, { generateKeys = true, language }: { generateKeys?: boolean; language?: string } = {}): Conversion {
+export function convertBib(input: string, { generateKeys = true, language, downloadDate }: { generateKeys?: boolean; language?: string; downloadDate?: string } = {}): Conversion {
   if (language !== undefined && /[{}\\\p{Cc}]/u.test(language)) throw new Error('言語名には波括弧・バックスラッシュ・制御文字を使えません。');
+  if (downloadDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(downloadDate)) throw new Error('ダウンロード日は YYYY-MM-DD で指定してください。');
   if (!input.trim()) throw new Error('.bib の内容を入力してください。');
   const library = parseVerbatim(input);
   if (library.errors.length) throw new Error(library.errors.map(error => error.error).join('\n'));
@@ -130,6 +131,7 @@ export function convertBib(input: string, { generateKeys = true, language }: { g
       } else removed.push(name);
     }
     if (language !== undefined) fields.language = language.trim();
+    if (downloadDate !== undefined) fields._download_at = downloadDate;
     if (language === 'japanese' && fields.author) {
       fields.author = fields.author.split(/\s+and\s+/i).flatMap(japaneseAuthorList).join(' and ');
     }

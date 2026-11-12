@@ -27,7 +27,7 @@ export function fieldLabel(field: string): string { return labels[field] ?? fiel
 
 const sharedOptional = ['_tags', '_notes'];
 const basicOptional = new Set(['author', 'editor', 'title', 'date', 'language', 'journaltitle', 'booktitle', 'publisher', 'institution', 'type', 'volume', 'number', 'pages', 'doi', 'url', 'urldate', 'isbn', 'edition', '_tags', '_notes']);
-export const excludedFields = new Set(['abstract', 'annotation', 'keywords', 'file', 'library', 'execute', 'note', 'location', '_download_at', 'crossref', 'xref', 'xdata', 'related', 'relatedtype', 'relatedoptions', 'relatedstring', 'entryset', 'ids']);
+export const excludedFields = new Set(['abstract', 'annotation', 'keywords', 'file', 'library', 'execute', 'note', 'location', 'crossref', 'xref', 'xdata', 'related', 'relatedtype', 'relatedoptions', 'relatedstring', 'entryset', 'ids']);
 const legacyDates = new Set(['year', 'month', 'day']);
 export const supportedFields = [...new Set([
   ...definitions.globalFields,

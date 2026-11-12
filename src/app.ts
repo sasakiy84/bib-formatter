@@ -2,6 +2,7 @@ import { fieldLabel } from './field-actions';
 import { convertPdf } from './pdf';
 import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, type Conversion } from './formatter';
 import { exampleBib } from './examples';
+import { detectBibLanguage } from './language';
 
 function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
   const found = document.getElementById(id);
@@ -20,6 +21,8 @@ const fieldTools = element('field-tools', HTMLDivElement);
 const entryTools = element('entry-tools', HTMLDivElement);
 const fieldButtons = element('field-buttons', HTMLDivElement);
 let inputLanguage = 'japanese';
+let detectLanguageOnConvert = true;
+let lastConvertedSource = '';
 const languageButtons = ['japanese', 'english', 'other'].map(value => ({ value, button: element(`language-${value}`, HTMLButtonElement) }));
 const otherLanguage = element('other-language', HTMLInputElement);
 const otherLanguageLabel = element('other-language-label', HTMLLabelElement);
@@ -53,16 +56,26 @@ element('copy-prompt', HTMLButtonElement).addEventListener('click', () => void c
 function selectedLanguage(): string {
   return inputLanguage === 'other' ? otherLanguage.value.trim() : inputLanguage;
 }
+function selectLanguage(value: string): void {
+  inputLanguage = ['japanese', 'english'].includes(value) ? value : 'other';
+  if (inputLanguage === 'other' && value !== 'other') otherLanguage.value = value;
+  languageButtons.forEach(choice => choice.button.setAttribute('aria-pressed', String(choice.value === inputLanguage)));
+  otherLanguageLabel.hidden = inputLanguage !== 'other';
+}
+function languageChanged(): void {
+  detectLanguageOnConvert = false;
+  const input = source.value === lastConvertedSource && output.value.trim() ? output.value : source.value || output.value;
+  if (input.trim()) convertSource(input);
+  else sourceChanged();
+}
 languageButtons.forEach(({ value, button }) => {
   button.addEventListener('click', () => {
     if (inputLanguage === value) return;
-    inputLanguage = value;
-    languageButtons.forEach(choice => choice.button.setAttribute('aria-pressed', String(choice.value === value)));
-    otherLanguageLabel.hidden = value !== 'other';
-    sourceChanged();
+    selectLanguage(value);
+    languageChanged();
   });
 });
-otherLanguage.addEventListener('input', sourceChanged);
+otherLanguage.addEventListener('input', languageChanged);
 
 let result: Conversion | undefined;
 let inputRevision = 0;
@@ -93,13 +106,10 @@ function sourceChanged(): void {
   if (!output.value.trim()) invalidate(true);
   else status.textContent = '';
 }
-let pasteIntoEmptyOutput = false;
-source.addEventListener('paste', () => { pasteIntoEmptyOutput = !output.value.trim(); });
 source.addEventListener('input', event => {
+  detectLanguageOnConvert = true;
   sourceChanged();
-  const shouldConvert = pasteIntoEmptyOutput && event instanceof InputEvent && event.inputType === 'insertFromPaste';
-  pasteIntoEmptyOutput = false;
-  if (shouldConvert) convertSource();
+  if (event instanceof InputEvent && event.inputType === 'insertFromPaste') convertSource();
 });
 output.addEventListener('input', () => {
   const text = output.value;
@@ -111,8 +121,8 @@ output.addEventListener('input', () => {
 
   } catch (error) { status.textContent = `編集中: ${error instanceof Error ? error.message : String(error)}`; }
 });
-element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
-element('clear', HTMLButtonElement).addEventListener('click', () => { source.value = ''; invalidate(); source.focus(); });
+element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; detectLanguageOnConvert = true; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
+element('clear', HTMLButtonElement).addEventListener('click', () => { source.value = ''; detectLanguageOnConvert = true; invalidate(); source.focus(); });
 function displayResult(conversion: Conversion, writeOutput = true): void {
   result = conversion;
   if (writeOutput) output.value = result.bib;
@@ -210,29 +220,42 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
   invalidate();
   const revision = inputRevision;
   const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
-  const inputLanguage = selectedLanguage();
   try {
     if (isPdf) {
-      const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()), { language: inputLanguage });
+      const conversion = await convertPdf(new Uint8Array(await file.arrayBuffer()));
       if (revision !== inputRevision) return;
       source.value = conversion.bib;
-      displayResult(conversion);
+      detectLanguageOnConvert = true;
+      convertSource(source.value, conversion.warnings);
     } else {
       const text = await file.text();
       if (revision !== inputRevision) return;
       source.value = text;
-      status.textContent = '';
+      detectLanguageOnConvert = true;
+      convertSource();
     }
   } catch (error) {
     if (revision === inputRevision) status.textContent = `読み込めませんでした: ${error instanceof Error ? error.message : String(error)}`;
   }
 });
-function convertSource(): void {
-  invalidate();
-  try { displayResult(convertBib(source.value, { language: selectedLanguage() })); }
+function convertSource(input: string = source.value, importWarnings: string[] = []): void {
+  invalidate(input === output.value);
+  try {
+    if (detectLanguageOnConvert) {
+      const detected = detectBibLanguage(input);
+      if (detected !== undefined) selectLanguage(detected);
+      detectLanguageOnConvert = false;
+    }
+    const now = new Date();
+    const downloadDate = [String(now.getFullYear()).padStart(4, '0'), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+    const conversion = convertBib(input, { language: selectedLanguage(), downloadDate });
+    conversion.warnings = [...new Set([...conversion.warnings, ...importWarnings])];
+    displayResult(conversion);
+    lastConvertedSource = source.value;
+  }
   catch (error) { status.textContent = `変換できませんでした: ${error instanceof Error ? error.message : String(error)}`; }
 }
-element('convert', HTMLButtonElement).addEventListener('click', convertSource);
+element('convert', HTMLButtonElement).addEventListener('click', () => convertSource());
 source.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') element('convert', HTMLButtonElement).click();
 });
@@ -246,8 +269,8 @@ copyNames.addEventListener('click', async () => {
 download.addEventListener('click', () => {
   if (!result) return;
   const url = URL.createObjectURL(new Blob([result.bib], { type: 'application/x-bibtex;charset=utf-8' }));
-  const key = (result.entries[0]?.key || 'references').replace(/[<>:"/\\|?*\p{Cc}\p{Cf}]/gu, '-');
-  const link = document.createElement('a'); link.href = url; link.download = `_${key}.bib`; link.click();
+  const filename = result.entries[0]?.filename || 'references';
+  const link = document.createElement('a'); link.href = url; link.download = `${filename}.bib`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 

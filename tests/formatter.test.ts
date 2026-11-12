@@ -2,21 +2,43 @@ import { getFieldActions } from '../src/field-actions';
 import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
 import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename, removeEntryField } from '../src/formatter';
+import { detectBibLanguage } from '../src/language';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
   if (!entry) throw new Error('No entry');
   return entry;
 }
-test('conversion removes location, its address alias and download dates while retaining other custom fields', () => {
+test('conversion removes location and its address alias while retaining custom fields and download dates', () => {
   const converted = first('@book{book,author={山田, 太郎},date={2026},location={東京},address={大阪},_download_at={2020-01-01},_notes={Keep},_tags={Tag},_memo={Memo}}');
   expect(converted.fields.location).toBeUndefined();
   expect(converted.fields.address).toBeUndefined();
-  expect(converted.fields._download_at).toBeUndefined();
-  expect(converted.removed).toEqual(['location', 'address', '_download_at']);
+  expect(converted.fields._download_at).toBe('2020-01-01');
+  expect(converted.removed).toEqual(['location', 'address']);
   expect(converted.fields._notes).toBe('Keep');
   expect(converted.fields._tags).toBe('Tag');
   expect(converted.fields._memo).toBe('Memo');
+});
+test('conversion records the provided local date and preserves it during editing previews', () => {
+  const converted = convertBib('@book{a,title={A},_download_at={2020-01-01}} @misc{b,title={B}}', { downloadDate: '2026-11-12' });
+  expect(converted.entries.map(entry => entry.fields._download_at)).toEqual(['2026-11-12', '2026-11-12']);
+  expect(convertBib(converted.bib, { generateKeys: false }).bib).toBe(converted.bib);
+});
+describe('simple language detection', () => {
+  test('uses title text instead of the nationality of authors', () => {
+    expect(detectBibLanguage('@misc{x,title={日本語の研究},author={Smith, Jane}}')).toBe('japanese');
+    expect(detectBibLanguage('@misc{x,title={An English Study},author={山田, 太郎}}')).toBe('english');
+  });
+  test('prefers explicit language metadata including other languages', () => {
+    expect(detectBibLanguage('@misc{x,title={研究},language={en-US}}')).toBe('english');
+    expect(detectBibLanguage('@misc{x,title={A Study},langid={japanese}}')).toBe('japanese');
+    expect(detectBibLanguage('@misc{x,title={Une étude},language={french}}')).toBe('french');
+  });
+  test('handles other scripts and leaves missing or malformed information undecided', () => {
+    expect(detectBibLanguage('@misc{x,title={Исследование}}')).toBe('');
+    expect(detectBibLanguage('@misc{x,title={123}}')).toBeUndefined();
+    expect(detectBibLanguage('@misc{broken')).toBeUndefined();
+  });
 });
 test('ten-name author, editor and translator lists fit on one line without splitting corporate names', () => {
   const names = [...Array.from({ length: 9 }, (_, index) => `Surname${index}, Given${index}`), '{Research and Development Group}'];

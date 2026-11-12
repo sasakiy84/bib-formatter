@@ -1,24 +1,28 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
-test('conversion and download exclude location, address and download dates', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('textbox', { name: '入力する .bib' }).fill('@article{Linell2019,author={Linell, Per},date={2019},location={London},address={Oxford},_download_at={2020-01-01},_notes={Keep}}');
-  await page.getByRole('button', { name: 'biblatex に変換' }).click();
-  const output = page.getByRole('textbox', { name: '変換した biblatex' });
-  await expect(output).not.toHaveValue(/(?:location|address|_download_at)\s*=/);
-  for (let attempt = 0; attempt < 2; attempt++) {
+test.describe('conversion date', () => {
+  test.use({ timezoneId: 'Asia/Tokyo' });
+  test('conversion records the local date in the editor and saving preserves it', async ({ page }) => {
+    await page.goto('/');
+    await page.clock.setFixedTime(new Date('2026-11-11T15:30:00Z'));
+    await page.getByRole('textbox', { name: '入力する .bib' }).fill('@article{Linell2019,author={Linell, Per},title={Example},date={2019},location={London},address={Oxford},_download_at={2020-01-01},_notes={Keep}}');
+    await page.getByRole('button', { name: 'biblatex に変換' }).click();
+    const output = page.getByRole('textbox', { name: '変換した biblatex' });
+    await expect(output).not.toHaveValue(/(?:location|address)\s*=/);
+    await expect(output).toHaveValue(/_download_at = \{2026-11-12\}/);
+    await page.clock.setFixedTime(new Date('2026-11-12T15:30:00Z'));
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: '.bib を保存' }).click();
     const downloaded = await pending;
-    expect(downloaded.suggestedFilename()).toBe('_Linell2019.bib');
+    expect(downloaded.suggestedFilename()).toBe('2019_Linell_Example.bib');
     const path = await downloaded.path();
     if (!path) throw new Error('Downloaded file is unavailable');
     const bib = await readFile(path, 'utf8');
-    expect(bib).not.toMatch(/(?:location|address|_download_at)\s*=/);
+    expect(bib).toContain('_download_at = {2026-11-12}');
     expect(bib).toContain('_notes = {Keep}');
     await expect(output).toHaveValue(bib);
-  }
+  });
 });
 
 for (const width of [1280, 390]) {
@@ -67,7 +71,7 @@ for (const width of [1280, 390]) {
     const pendingDownload = page.waitForEvent('download');
     await page.getByRole('button', { name: '.bib を保存' }).click();
     const download = await pendingDownload;
-    expect(download.suggestedFilename()).toBe('_Turing1936.bib');
+    expect(download.suggestedFilename()).toBe(`${await page.getByLabel('Turing1936', { exact: true }).inputValue()}.bib`);
     await page.screenshot({ path: `test-results/screen-${width}.png`, fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
@@ -129,7 +133,7 @@ for (const width of [1280, 390]) {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study');
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: '.bib を保存' }).click();
-    expect((await pending).suggestedFilename()).toBe('_Smith2024.bib');
+    expect((await pending).suggestedFilename()).toBe('2024_Smith-Jones-Lee-et-al_An-English-PDF-Study.bib');
     await page.screenshot({ path: `test-results/pdf-${width}.png`, fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
@@ -189,7 +193,7 @@ test('editing the output updates filenames and copies the exact edited bib', asy
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(edited);
   const pendingDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: '.bib を保存' }).click();
-  expect((await pendingDownload).suggestedFilename()).toBe('_edited.bib');
+  expect((await pendingDownload).suggestedFilename()).toBe('2026_Jones_Edited-English-Title.bib');
 });
 test('editing malformed output retains the draft and recovers filenames after correction', async ({ page }) => {
   await page.goto('/');
@@ -222,7 +226,7 @@ test('field-addition controls are hidden for multiple bibliography entries', asy
   await page.getByRole('textbox', { name: '変換した biblatex' }).fill('@misc{x,title={X}} @misc{y,title={Y}}');
   await expect(page.getByRole('button', { name: 'DOIを追加', exact: true })).toHaveCount(0);
 });
-test('pasting on the left auto-converts only when the output is empty', async ({ page, context }) => {
+test('each paste detects language and replaces existing output with a fresh conversion', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');
   const source = page.getByRole('textbox', { name: '入力する .bib' });
@@ -237,8 +241,16 @@ test('pasting on the left auto-converts only when the output is empty', async ({
   await page.evaluate(() => navigator.clipboard.writeText('@misc{another,title={Another Title},year=2026}'));
   await source.press('Control+V');
   await expect(source).toHaveValue(/Another Title/);
-  await expect(output).toHaveValue('@misc{edited,title={Keep My Edits},year=2025}');
-  await expect(page.getByLabel('edited', { exact: true })).toHaveValue('2025_Unknown_Keep-My-Edits');
+  await expect(output).toHaveValue(/title = \{Another Title\}/);
+  await expect(page.getByLabel('another', { exact: true })).toHaveValue('2026_Unknown_Another-Title');
+  await expect(page.getByRole('group', { name: '言語', exact: true }).getByRole('button', { name: '英語', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await source.focus();
+  await source.press('Control+A');
+  await page.evaluate(() => navigator.clipboard.writeText('@misc{,author={山田 太郎},title={日本語の研究},year=2026}'));
+  await source.press('Control+V');
+  await expect(output).toHaveValue(/language = \{japanese\}/);
+  await expect(page.getByLabel('山田2026', { exact: true })).toHaveValue('2026_山田_日本語の研究');
+  await expect(page.getByRole('group', { name: '言語', exact: true }).getByRole('button', { name: '日本語', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 for (const width of [1280, 390]) {
   test(`editing controls stay beside output and filename rows align at ${width}px`, async ({ page }) => {
@@ -354,6 +366,28 @@ test('PDF import uses the selected input language', async ({ page }) => {
   await page.getByRole('group', { name: '言語', exact: true }).getByRole('button', { name: '英語', exact: true }).click();
   await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'language.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ title: 'A Study', author: 'Jane Smith', year: '2025' })) });
   await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/language = \{english\}/);
+});
+test('language changes immediately reconvert the edited result and custom language input', async ({ page }) => {
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: '入力する .bib' });
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await source.fill('@misc{,author={Smith, Jane},title={An English Study},year=2026}');
+  await page.getByRole('button', { name: 'biblatex に変換' }).click();
+  const language = page.getByRole('group', { name: '言語', exact: true });
+  await expect(language.getByRole('button', { name: '英語', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await output.fill((await output.inputValue()).replace('An English Study', 'Edited Study').replace('  title =', '  _notes = {Keep},\n  title ='));
+  await language.getByRole('button', { name: '日本語', exact: true }).click();
+  await expect(output).toHaveValue(/language = \{japanese\}/);
+  await expect(output).toHaveValue(/title = \{Edited Study\}/);
+  await expect(output).toHaveValue(/_notes = \{Keep\}/);
+  await language.getByRole('button', { name: 'その他', exact: true }).click();
+  await page.getByRole('textbox', { name: '言語名', exact: true }).fill('french');
+  await expect(output).toHaveValue(/language = \{french\}/);
+  const draft = '@misc{draft,title={Still editing';
+  await output.fill(draft);
+  await language.getByRole('button', { name: '英語', exact: true }).click();
+  await expect(output).toHaveValue(draft);
+  await expect(page.getByRole('button', { name: '.bib を保存' })).toBeDisabled();
 });
 test('bibtex query parameter fills the input and converts Unicode and reserved characters once', async ({ page }) => {
   const bib = '@misc{, author={山田, 太郎}, title={日本語 + A&B #? 100%25}, year=2026}';
