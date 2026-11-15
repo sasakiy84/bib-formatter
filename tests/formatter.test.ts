@@ -135,6 +135,16 @@ describe('biblatex conversion', () => {
   });
 });
 describe('copyable filenames', () => {
+  test('prefix preserves identifier underscores and sanitizes characters unsafe for filenames', () => {
+    const fields = { year: '2026', author: '山田, 太郎', title: '研究' };
+    expect(makeFilename(fields, 'MA0001_')).toBe('MA0001_2026_山田_研究');
+    expect(makeFilename(fields, 'MA 00/01_')).toBe('MA-00-01_2026_山田_研究');
+    expect(makeFilename(fields, '')).toBe(makeFilename(fields));
+    const long = makeFilename({ ...fields, title: '日本語📚'.repeat(100) }, 'MA0001_');
+    expect(long).toStartWith('MA0001_2026_山田_');
+    expect(new TextEncoder().encode(long).length).toBeLessThanOrEqual(240);
+    expect(long).not.toContain('\ufffd');
+  });
   test('uses at most three English authors with et-al for additional authors', () => {
     expect(makeFilename({ year: '2024', author: 'Smith, Jane and Jones, Alex and Lee, Sam and Brown, Chris', title: 'An English Title' })).toBe('2024_Smith-Jones-Lee-et-al_An-English-Title');
   });

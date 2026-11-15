@@ -1,8 +1,11 @@
 import { fieldLabel } from './field-actions';
 import { convertPdf } from './pdf';
-import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, type Conversion } from './formatter';
+import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, makeFilename, type Conversion } from './formatter';
 import { exampleBib } from './examples';
 import { detectBibLanguage } from './language';
+
+const query = new URLSearchParams(window.location.search);
+const filenamePrefix = query.get('prefix') ?? '';
 
 function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
   const found = document.getElementById(id);
@@ -124,7 +127,19 @@ output.addEventListener('input', () => {
 element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; detectLanguageOnConvert = true; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
 element('clear', HTMLButtonElement).addEventListener('click', () => { source.value = ''; detectLanguageOnConvert = true; invalidate(); source.focus(); });
 function displayResult(conversion: Conversion, writeOutput = true): void {
-  result = conversion;
+  result = filenamePrefix ? {
+    ...conversion,
+    entries: conversion.entries.map(entry => ({ ...entry, filename: makeFilename(entry.fields, filenamePrefix) })),
+    warnings: [...conversion.warnings],
+  } : conversion;
+  if (filenamePrefix) {
+    const seen = new Set<string>();
+    for (const entry of result.entries) {
+      const warning = `${entry.key}: ファイル名が重複しています。保存時に区別してください。`;
+      if (seen.has(entry.filename) && !result.warnings.includes(warning)) result.warnings.push(warning);
+      seen.add(entry.filename);
+    }
+  }
   if (writeOutput) output.value = result.bib;
   filenames.replaceChildren();
   warnings.replaceChildren();
@@ -274,7 +289,7 @@ download.addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
-const initialBibtex = new URLSearchParams(window.location.search).get('bibtex');
+const initialBibtex = query.get('bibtex');
 if (initialBibtex?.trim()) {
   source.value = initialBibtex;
   convertSource();

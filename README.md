@@ -24,8 +24,11 @@
 
 `bibtex` クエリパラメータに URL エンコードした BibTeX を渡すと、入力欄へ読み込み、自動変換します。日本語・改行・記号は `URLSearchParams` または `encodeURIComponent` でエンコードしてください。
 
+`prefix` でファイル名の先頭に付ける文字列を指定できます。たとえば `?prefix=MA0001_` なら `MA0001_2026_山田_研究` のようになり、.bib の保存名も `MA0001_2026_山田_研究.bib` になります。区切りは自動で追加しないため、必要なら末尾の `_` も指定してください。指定なし・空文字なら通常の名前です。引用キーには影響せず、再変換・編集・PDF取り込みでも同じprefixを使います。空白とファイル名に使えない文字はハイフンに置き換えます。
+
 ```js
 const url = new URL('https://sasakiy84.github.io/bib-formatter/');
+url.searchParams.set('prefix', 'MA0001_');
 url.searchParams.set('bibtex', '@misc{, author={山田, 太郎}, title={研究}, year=2026}');
 console.log(url.href);
 ```

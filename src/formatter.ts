@@ -58,7 +58,7 @@ function creatorName(creator: Creator): string {
   return creator.name ?? [creator.prefix, creator.lastName].filter(Boolean).join(' ');
 }
 
-export function makeFilename(fields: Record<string, string>): string {
+export function makeFilename(fields: Record<string, string>, prefix = ''): string {
   const selected = Object.fromEntries(['author', 'editor', 'title'].filter(name => fields[name]).map(name => [name, fields[name]!]));
   const normalized = parse(serialize({ type: 'misc', key: 'filename', fields: selected }), {
     sentenceCase: false, caseProtection: false, fieldMode: { title: 'richtext' },
@@ -70,7 +70,8 @@ export function makeFilename(fields: Record<string, string>): string {
   const title = typeof normalized?.title === 'string' ? normalized.title : fields.title ?? 'Untitled';
   const parts = [filenamePart(year), filenamePart(authors) || 'Unknown', filenamePart(title) || 'Untitled'];
   // Keep the UTF-8 basename below common 255-byte limits, including room for a .pdf extension.
-  let filename = parts.join('_');
+  const safePrefix = prefix.normalize('NFC').replace(/[<>:"/\\|?*\p{Cc}\p{Cf}\s]+/gu, '-');
+  let filename = safePrefix + parts.join('_');
   while (new TextEncoder().encode(filename).length > 240) filename = Array.from(filename).slice(0, -1).join('');
   return filename.replace(/[. ]+$/g, '');
 }

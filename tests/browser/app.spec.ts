@@ -396,6 +396,33 @@ test('bibtex query parameter fills the input and converts Unicode and reserved c
   await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/^@misc\{山田2026,/);
   await expect(page.getByRole('textbox', { name: '変換した biblatex' })).toHaveValue(/日本語 \+ A&B #\? 100%25/);
 });
+test('prefix query parameter follows edits, copy and downloads without changing the citation key', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 390, height: 900 });
+  const bib = '@misc{,author={山田, 太郎},title={研究},date={2026}}';
+  await page.goto(`/?${new URLSearchParams({ prefix: 'MA0001_', bibtex: bib })}`);
+  const filename = page.getByLabel('山田2026', { exact: true });
+  await expect(filename).toHaveValue('MA0001_2026_山田_研究');
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await expect(output).toHaveValue(/^@misc\{山田2026,/);
+  await expect(output).not.toHaveValue(/MA0001_/);
+  await output.fill((await output.inputValue()).replace('title = {研究}', 'title = {編集後}'));
+  await page.getByRole('group', { name: '言語', exact: true }).getByRole('button', { name: '英語', exact: true }).click();
+  await expect(filename).toHaveValue('MA0001_2026_山田_編集後');
+  await page.getByRole('button', { name: '山田2026 のファイル名をコピー', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('MA0001_2026_山田_編集後');
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: '.bib を保存' }).click();
+  expect((await pending).suggestedFilename()).toBe('MA0001_2026_山田_編集後.bib');
+  await page.screenshot({ path: 'test-results/filename-prefix-390.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+test('prefix-only URL applies to a subsequently imported PDF', async ({ page }) => {
+  const { makePdf } = await import('../pdf-fixtures');
+  await page.goto('/?prefix=MA0001_');
+  await page.getByLabel('.bib または PDF ファイルを開く').setInputFiles({ name: 'study.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await makePdf({ title: 'A Study', author: 'Smith, Jane', year: '2026' })) });
+  await expect(page.getByLabel('Smith2026', { exact: true })).toHaveValue('MA0001_2026_Smith_A-Study');
+});
 test('invalid bibtex query parameter keeps the input available for editing', async ({ page }) => {
   const bib = '@article{broken';
   await page.goto(`/?${new URLSearchParams({ bibtex: bib })}`);
