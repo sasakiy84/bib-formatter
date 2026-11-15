@@ -3,6 +3,8 @@ import { describe, expect, test } from 'bun:test';
 import { parseVerbatim } from '@retorquere/bibtex-parser/js';
 import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilename, removeEntryField } from '../src/formatter';
 import { detectBibLanguage } from '../src/language';
+import { parseBibInput } from '../src/bib-input';
+import { whitespaceKeyBib } from './bib-fixtures';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
@@ -54,6 +56,43 @@ test('eleven-name lists wrap by creator and remain stable after repeated convers
   expect(converted.entries[0]?.fields.author).toBe(names.join(' and '));
 });
 describe('biblatex conversion', () => {
+  test('accepts a Japanese full-name citation key with spaces before normalizing names and the key', () => {
+    expect(detectBibLanguage(whitespaceKeyBib)).toBe('japanese');
+    const converted = convertBib(whitespaceKeyBib, { language: 'japanese' });
+    const entry = converted.entries[0]!;
+    expect(entry.key).toBe('中山2024');
+    expect(entry.fields.author).toBe('中山, 竣平 and 金澤, 輝一 and 上野, 史 and 太田, 学');
+    expect(entry.fields.journaltitle).toBe('Webインテリジェンスとインタラクション研究会 予稿集');
+    expect(entry.fields.title).toBe('BERTとその後継モデルによる参考文献書誌情報抽出の確信度による誤り検出');
+    expect(entry.fields.pages).toBe('48--55');
+    expect(entry.fields.date).toBe('2024');
+    expect(entry.fields.doi).toBe('10.57413/wii.20.0_48');
+    expect(entry.filename).toStartWith('2024_中山-金澤-上野-et-al_');
+    expect(parseVerbatim(converted.bib).errors).toEqual([]);
+  });
+  test('repairs full-width and tab whitespace in parenthesis-delimited entry keys', () => {
+    const converted = convertBib('@article(中山\u3000竣平\t2024, author={中山, 竣平}, year=2024, title={研究})');
+    expect(converted.entries[0]?.key).toBe('中山2024');
+  });
+  test('key recovery preserves header-like text inside values, directives and comments', () => {
+    const input = String.raw`% @article{Ignore This,
+@comment{ @article{Comment Key,} }
+@string{marker = "@article{String Key,}"}
+@preamble{"@article{Preamble Key,}"}
+@article{Actual Key, title={An @article{Nested Key,} and $x^2$}, _notes="An @book{Quoted Key,}", _memo=marker}
+@book(Another Key, title="Another @article{Title Key,}")`;
+    const library = parseBibInput(input);
+    expect(library.errors).toEqual([]);
+    expect(library.entries.map(entry => entry.key)).toEqual(['ActualKey', 'AnotherKey']);
+    expect(library.entries[0]?.fields.title).toBe('An @article{Nested Key,} and $x^2$');
+    expect(library.entries[0]?.fields._notes).toBe('An @book{Quoted Key,}');
+    expect(library.entries[0]?.fields._memo).toBe('@article{String Key,}');
+    expect(library.entries[1]?.fields.title).toBe('Another @article{Title Key,}');
+    expect(library.preambles).toEqual(['"@article{Preamble Key,}"']);
+  });
+  test('rejects duplicate keys introduced by removing whitespace', () => {
+    expect(() => convertBib('@misc{A B,title={A}} @misc{AB,title={B}}')).toThrow('重複');
+  });
   test('English journal article converts aliases, date, DOI and page ranges', () => {
     const entry = first('@ARTICLE{Turing1936, AUTHOR={Turing, Alan M.}, TITLE={On Computable Numbers}, JOURNAL={Proceedings of the London Mathematical Society}, YEAR=1936, MONTH=nov, PAGES={230–265}, DOI={https://doi.org/10.1112/plms/s2-42.1.230}}');
     expect(entry.fields).toEqual({ author: 'Turing, Alan M.', title: 'On Computable Numbers', journaltitle: 'Proceedings of the London Mathematical Society', date: '1936-11', pages: '230--265', doi: '10.1112/plms/s2-42.1.230' });

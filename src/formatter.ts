@@ -1,6 +1,7 @@
 import { canonicalFieldName, excludedFields, getFieldActions, supportedFields } from './field-actions';
 import { japaneseAuthorList } from './authors';
-import { parse, parseVerbatim, type VerbatimEntry, type Creator } from '@retorquere/bibtex-parser/js';
+import { parse, type VerbatimEntry, type Creator } from '@retorquere/bibtex-parser/js';
+import { parseBibInput } from './bib-input';
 
 const fieldOrder = `author editor translator title subtitle titleaddon shorttitle maintitle mainsubtitle bookauthor booktitle booksubtitle booktitleaddon journaltitle journalsubtitle issuetitle issuesubtitle date eventdate origdate urldate edition volume part volumes number issue series chapter pages pagetotal eid publisher institution organization eventtitle eventtitleaddon venue version type howpublished doi url eprint eprinttype eprintclass isbn issn isrn language langid entrysubtype pubstate options label shorthand sortkey sortname sorttitle sortyear year month day`.split(' ');
 const retained = new Set([...fieldOrder, ...supportedFields]);
@@ -109,7 +110,7 @@ export function convertBib(input: string, { generateKeys = true, language, downl
   if (language !== undefined && /[{}\\\p{Cc}]/u.test(language)) throw new Error('言語名には波括弧・バックスラッシュ・制御文字を使えません。');
   if (downloadDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(downloadDate)) throw new Error('ダウンロード日は YYYY-MM-DD で指定してください。');
   if (!input.trim()) throw new Error('.bib の内容を入力してください。');
-  const library = parseVerbatim(input);
+  const library = parseBibInput(input);
   if (library.errors.length) throw new Error(library.errors.map(error => error.error).join('\n'));
   if (!library.entries.length) throw new Error('文献エントリが見つかりません。');
   const warnings: string[] = [];
@@ -174,7 +175,7 @@ export function convertBib(input: string, { generateKeys = true, language, downl
 export function changeEntryType(input: string, key: string, selection: string, entryIndex?: number): Conversion {
   const supported = new Set(['article', 'inproceedings', 'book', 'incollection', 'thesis', 'phdthesis', 'mathesis', 'report', 'online', 'unpublished', 'misc']);
   if (!supported.has(selection)) throw new Error('変更先の文献種別を選択してください。');
-  const library = parseVerbatim(input);
+  const library = parseBibInput(input);
   if (library.errors.length) throw new Error('bib を読み込めません。');
   const entry = entryIndex === undefined ? library.entries.find(entry => entry.key === key) : library.entries[entryIndex];
   if (!entry) throw new Error('変更する文献が見つかりません。');
@@ -190,7 +191,7 @@ export function changeEntryType(input: string, key: string, selection: string, e
 }
 
 export function addCommonField(input: string, field: string): Conversion {
-  const library = parseVerbatim(input);
+  const library = parseBibInput(input);
   if (library.errors.length || library.entries.length !== 1) throw new Error('フィールドの追加は正しい bib が1件のときに使えます。');
   const entry = library.entries[0]!;
   if (entry.fields[field] !== undefined) throw new Error('このフィールドは追加済みです。');
@@ -203,14 +204,14 @@ export function addCommonField(input: string, field: string): Conversion {
 }
 
 export function getSingleEntryFieldActions(input: string): ReturnType<typeof getFieldActions> {
-  const library = parseVerbatim(input);
+  const library = parseBibInput(input);
   if (library.errors.length || library.entries.length !== 1) throw new Error('フィールド操作は正しい bib が1件のときに使えます。');
   const entry = library.entries[0]!;
   return getFieldActions(entry.type, entry.fields);
 }
 
 export function removeEntryField(input: string, field: string): Conversion {
-  const library = parseVerbatim(input);
+  const library = parseBibInput(input);
   if (library.errors.length || library.entries.length !== 1) throw new Error('フィールド操作は正しい bib が1件のときに使えます。');
   const entry = library.entries[0]!;
   if (!getFieldActions(entry.type, entry.fields).remove.includes(field)) throw new Error('このフィールドは種別に対応しています。');

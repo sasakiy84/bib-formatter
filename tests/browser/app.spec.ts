@@ -1,5 +1,29 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { whitespaceKeyBib } from '../bib-fixtures';
+
+test('pasting the Japanese full-name key recovers language, bibliography and download names', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/?prefix=MA0001_');
+  const language = page.getByRole('group', { name: '言語', exact: true });
+  await language.getByRole('button', { name: '英語', exact: true }).click();
+  await page.evaluate(text => navigator.clipboard.writeText(text), whitespaceKeyBib);
+  const source = page.getByRole('textbox', { name: '入力する .bib' });
+  await source.focus();
+  await source.press('Control+V');
+  const output = page.getByRole('textbox', { name: '変換した biblatex' });
+  await expect(output).toHaveValue(/^@article\{中山2024,/);
+  await expect(output).toHaveValue(/author = \{中山, 竣平 and 金澤, 輝一 and 上野, 史 and 太田, 学\}/);
+  await expect(output).toHaveValue(/pages = \{48--55\}/);
+  await expect(output).toHaveValue(/doi = \{10\.57413\/wii\.20\.0_48\}/);
+  await expect(language.getByRole('button', { name: '日本語', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const filename = await page.getByLabel('中山2024', { exact: true }).inputValue();
+  expect(filename).toMatch(/^MA0001_2024_中山-金澤-上野-et-al_/);
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: '.bib を保存' }).click();
+  expect((await pending).suggestedFilename()).toBe(`${filename}.bib`);
+  await expect(page.getByRole('status')).not.toBeVisible();
+});
 
 test.describe('conversion date', () => {
   test.use({ timezoneId: 'Asia/Tokyo' });

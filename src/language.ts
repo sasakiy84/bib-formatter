@@ -1,8 +1,8 @@
-import { parseVerbatim } from '@retorquere/bibtex-parser/js';
+import { parseBibInput } from './bib-input';
 
 // Prefer explicit metadata, then use the first entry's title rather than its authors' names.
 export function detectBibLanguage(input: string): string | undefined {
-  const library = parseVerbatim(input);
+  const library = parseBibInput(input);
   if (library.errors.length) return undefined;
   const entry = library.entries[0];
   if (!entry) return undefined;
