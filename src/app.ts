@@ -3,9 +3,13 @@ import { convertPdf } from './pdf';
 import { addCommonField, getSingleEntryFieldActions, removeEntryField, changeEntryType, convertBib, makeFilename, type Conversion } from './formatter';
 import { exampleBib } from './examples';
 import { detectBibLanguage } from './language';
+import { addEntryTag, entryTags, tagCandidates } from './tags';
+import { discardDraft, readDraft, writeDraft, type Draft } from './draft';
 
 const query = new URLSearchParams(window.location.search);
 const filenamePrefix = query.get('prefix') ?? '';
+const urlBibtex = query.get('bibtex');
+let initialBibtex = urlBibtex?.trim() ? urlBibtex : null;
 
 function element<T extends HTMLElement>(id: string, kind: { new(): T }): T {
   const found = document.getElementById(id);
@@ -23,7 +27,27 @@ const copyNames = element('copy-names', HTMLButtonElement);
 const fieldTools = element('field-tools', HTMLDivElement);
 const entryTools = element('entry-tools', HTMLDivElement);
 const fieldButtons = element('field-buttons', HTMLDivElement);
-let inputLanguage = 'japanese';
+const candidateRegion = element('tag-candidates', HTMLFieldSetElement);
+const candidateContainer = element('tag-candidate-buttons', HTMLDivElement);
+const candidateReason = element('tag-candidate-reason', HTMLParagraphElement);
+const candidates = tagCandidates(query);
+candidateRegion.hidden = candidates.length === 0;
+candidateReason.hidden = !candidates.some(tag => tag.includes(','));
+const candidateButtons = candidates.map(tag => {
+  const button = document.createElement('button'); button.type = 'button'; button.textContent = tag;
+  if (tag.includes(',')) button.setAttribute('aria-describedby', 'tag-candidate-reason');
+  button.addEventListener('click', () => {
+    if (button.disabled || button.getAttribute('aria-pressed') === 'true') return;
+    try {
+      const updated = addEntryTag(output.value, tag);
+      inputRevision++;
+      displayResult(updated);
+    } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+  });
+  candidateContainer.append(button);
+  return { tag, button };
+});
+let inputLanguage: Draft['language'] = 'japanese';
 let detectLanguageOnConvert = true;
 let lastConvertedSource = '';
 const languageButtons = ['japanese', 'english', 'other'].map(value => ({ value, button: element(`language-${value}`, HTMLButtonElement) }));
@@ -60,7 +84,7 @@ function selectedLanguage(): string {
   return inputLanguage === 'other' ? otherLanguage.value.trim() : inputLanguage;
 }
 function selectLanguage(value: string): void {
-  inputLanguage = ['japanese', 'english'].includes(value) ? value : 'other';
+  inputLanguage = value === 'japanese' || value === 'english' ? value : 'other';
   if (inputLanguage === 'other' && value !== 'other') otherLanguage.value = value;
   languageButtons.forEach(choice => choice.button.setAttribute('aria-pressed', String(choice.value === inputLanguage)));
   otherLanguageLabel.hidden = inputLanguage !== 'other';
@@ -83,6 +107,21 @@ otherLanguage.addEventListener('input', languageChanged);
 let result: Conversion | undefined;
 let inputRevision = 0;
 
+function saveCurrentDraft(): void {
+  writeDraft({ version: 1, source: source.value, output: output.value, language: inputLanguage,
+    otherLanguage: otherLanguage.value, initialBibtex, detectLanguageOnConvert, lastConvertedSource });
+}
+function updateTagCandidates(): void {
+  const entry = result?.entries.length === 1 ? result.entries[0] : undefined;
+  const selected = entryTags(entry?.fields._tags ?? '');
+  for (const { tag, button } of candidateButtons) {
+    const added = selected.includes(tag);
+    button.disabled = !entry || tag.includes(',');
+    button.setAttribute('aria-pressed', String(added));
+    button.setAttribute('aria-disabled', String(button.disabled || added));
+    button.textContent = added ? `${tag}（追加済み）` : tag;
+  }
+}
 function invalidate(preserveOutput = false): void {
   inputRevision++;
   result = undefined;
@@ -94,6 +133,7 @@ function invalidate(preserveOutput = false): void {
   warnings.replaceChildren();
   copy.disabled = download.disabled = copyNames.disabled = true;
   status.textContent = '';
+  updateTagCandidates();
 }
 async function copyText(text: string, fallback: HTMLTextAreaElement | HTMLInputElement, feedback: HTMLElement = status): Promise<void> {
   try {
@@ -108,13 +148,14 @@ function sourceChanged(): void {
   inputRevision++;
   if (!output.value.trim()) invalidate(true);
   else status.textContent = '';
+  saveCurrentDraft();
 }
 source.addEventListener('input', event => {
   detectLanguageOnConvert = true;
   sourceChanged();
   if (event instanceof InputEvent && event.inputType === 'insertFromPaste') convertSource();
 });
-output.addEventListener('input', () => {
+function previewOutput(): void {
   const text = output.value;
   invalidate(true);
   if (!text.trim()) return;
@@ -123,9 +164,18 @@ output.addEventListener('input', () => {
     displayResult({ ...updated, bib: text }, false);
 
   } catch (error) { status.textContent = `編集中: ${error instanceof Error ? error.message : String(error)}`; }
-});
+}
+output.addEventListener('input', () => { previewOutput(); saveCurrentDraft(); });
 element('example', HTMLButtonElement).addEventListener('click', () => { source.value = exampleBib; detectLanguageOnConvert = true; sourceChanged(); source.focus(); source.setSelectionRange(0, 0); source.scrollTop = 0; });
-element('clear', HTMLButtonElement).addEventListener('click', () => { source.value = ''; detectLanguageOnConvert = true; invalidate(); source.focus(); });
+element('clear', HTMLButtonElement).addEventListener('click', () => {
+  source.value = ''; otherLanguage.value = ''; selectLanguage('japanese');
+  detectLanguageOnConvert = true; lastConvertedSource = ''; initialBibtex = null;
+  invalidate(); discardDraft();
+  // Remove the old URL seed as well, so a reload after clearing cannot re-import it.
+  const url = new URL(window.location.href); url.searchParams.delete('bibtex');
+  try { history.replaceState(history.state, '', url.href); } catch { /* History can be unavailable in restricted frames. */ }
+  source.focus();
+});
 function displayResult(conversion: Conversion, writeOutput = true): void {
   result = filenamePrefix ? {
     ...conversion,
@@ -225,6 +275,8 @@ function displayResult(conversion: Conversion, writeOutput = true): void {
     const group = document.createElement('div'); group.className = 'filename-entry'; group.append(label, row); filenames.append(group);
   }
   copy.disabled = download.disabled = copyNames.disabled = false;
+  updateTagCandidates();
+  saveCurrentDraft();
 }
 element('file', HTMLInputElement).addEventListener('change', async event => {
   if (!(event.currentTarget instanceof HTMLInputElement)) return;
@@ -250,7 +302,10 @@ element('file', HTMLInputElement).addEventListener('change', async event => {
       convertSource();
     }
   } catch (error) {
-    if (revision === inputRevision) status.textContent = `読み込めませんでした: ${error instanceof Error ? error.message : String(error)}`;
+    if (revision === inputRevision) {
+      status.textContent = `読み込めませんでした: ${error instanceof Error ? error.message : String(error)}`;
+      saveCurrentDraft();
+    }
   }
 });
 function convertSource(input: string = source.value, importWarnings: string[] = []): void {
@@ -265,10 +320,11 @@ function convertSource(input: string = source.value, importWarnings: string[] = 
     const downloadDate = [String(now.getFullYear()).padStart(4, '0'), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
     const conversion = convertBib(input, { language: selectedLanguage(), downloadDate });
     conversion.warnings = [...new Set([...conversion.warnings, ...importWarnings])];
-    displayResult(conversion);
     lastConvertedSource = source.value;
+    displayResult(conversion);
   }
   catch (error) { status.textContent = `変換できませんでした: ${error instanceof Error ? error.message : String(error)}`; }
+  saveCurrentDraft();
 }
 element('convert', HTMLButtonElement).addEventListener('click', () => convertSource());
 source.addEventListener('keydown', event => {
@@ -289,8 +345,16 @@ download.addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
-const initialBibtex = query.get('bibtex');
-if (initialBibtex?.trim()) {
+const draft = readDraft();
+if (initialBibtex && initialBibtex !== draft?.initialBibtex) {
   source.value = initialBibtex;
   convertSource();
+} else if (draft) {
+  source.value = draft.source; output.value = draft.output;
+  otherLanguage.value = draft.otherLanguage; selectLanguage(draft.language);
+  initialBibtex = draft.initialBibtex;
+  detectLanguageOnConvert = draft.detectLanguageOnConvert;
+  lastConvertedSource = draft.lastConvertedSource;
+  previewOutput();
 }
+updateTagCandidates();

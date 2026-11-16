@@ -36,6 +36,11 @@
     .field-group { min-width: 0; margin: .8rem 0; padding: .6rem; }
     .field-options { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .2rem .4rem .2rem 0; }
     .field-options button { font-size: .85rem; padding: .3rem .55rem; }
+    #tag-candidate-buttons { display: flex; flex-wrap: wrap; gap: .4rem; }
+    #tag-candidate-buttons button { min-width: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+    #tag-candidate-buttons button[aria-pressed=true] { font-weight: bold; outline: 2px solid currentColor; outline-offset: -3px; }
+    #tag-candidate-buttons button:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+    #tag-candidate-reason { margin-bottom: 0; font-size: .85rem; overflow-wrap: anywhere; }
     button { padding: .4rem .85rem; cursor: pointer; }
     button:disabled { cursor: default; }
     input[type=file] { max-width: 100%; }
@@ -92,7 +97,7 @@
         <textarea id="source" spellcheck="false" placeholder="@article{key,&#10;  author = {Smith, Jane},&#10;  title = {An Example},&#10;  year = {2024},&#10;}"></textarea>
         <div class="toolbar">
           <button id="convert" type="button">biblatex に変換</button>
-          <button id="clear" type="button">クリア</button>
+          <button id="clear" type="button">下書きを消去</button>
         </div>
       </section>
       <section class="pane" aria-labelledby="output-title">
@@ -105,6 +110,11 @@
         </div>
         <textarea id="output" spellcheck="false" placeholder="変換結果"></textarea>
         <div class="editor-tools">
+        <fieldset id="tag-candidates" class="field-group" hidden>
+          <legend>タグ候補</legend>
+          <div id="tag-candidate-buttons"></div>
+          <p id="tag-candidate-reason" hidden>カンマを含むタグは、カンマ区切りの _tags に追加できません。</p>
+        </fieldset>
         <div id="entry-tools" aria-label="文献種別の編集"></div>
         <div id="field-tools" hidden>
           <div id="field-buttons" aria-label="フィールド操作"></div>

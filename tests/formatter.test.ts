@@ -5,12 +5,46 @@ import { addCommonField, changeEntryType, convertBib, makeCitationKey, makeFilen
 import { detectBibLanguage } from '../src/language';
 import { parseBibInput } from '../src/bib-input';
 import { whitespaceKeyBib } from './bib-fixtures';
+import { addEntryTag, entryTags, tagCandidates } from '../src/tags';
 
 function first(input: string): ReturnType<typeof convertBib>['entries'][number] {
   const entry = convertBib(input).entries[0];
   if (!entry) throw new Error('No entry');
   return entry;
 }
+describe('launcher tag candidates', () => {
+  test('keeps repeated query values intact, ordered, case-sensitive and decoded once', () => {
+    const query = new URLSearchParams('tags=+日本語+&tags=読解&tags=text%20difficulty&tags=&tags=日本語&tags=Text%20difficulty&tags=A%26B&tags=x%2By&tags=%252C&tags=a%2Cb&tags=two++spaces');
+    expect(tagCandidates(query)).toEqual(['日本語', '読解', 'text difficulty', 'Text difficulty', 'A&B', 'x+y', '%2C', 'a,b', 'two  spaces']);
+    expect(tagCandidates(new URLSearchParams())).toEqual([]);
+  });
+  test('adds tags without changing keys, dates, notes, language or other edited fields', () => {
+    const input = '@preamble{"Keep"} @article{edited,title={My Edit},author={Smith, Jane},date={2024},language={french},_download_at={2020-01-01},_notes={My {memo}},_tags={Existing, text difficulty},special={Keep}}';
+    const changed = addEntryTag(input, '日本語');
+    const before = parseVerbatim(input), after = parseVerbatim(changed.bib);
+    expect(after.errors).toEqual([]);
+    expect(after.entries[0]?.key).toBe('edited');
+    expect(after.preambles).toEqual(before.preambles);
+    expect(after.entries[0]?.fields).toEqual({ ...before.entries[0]!.fields, _tags: 'Existing, text difficulty, 日本語' });
+    expect(addEntryTag(changed.bib, '日本語').bib).toBe(changed.bib);
+    expect(addEntryTag(input, 'text difficulty').bib).toBe(input);
+  });
+  test('escapes structural symbols and preserves tag text including literal HTML and percent encodings', () => {
+    for (const tag of [String.raw`{open} } \path`, 'A&B + %2C #_~^', '</script><img src=x onerror=alert(1)>', 'two  spaces']) {
+      const changed = addEntryTag('@misc{edited,title={Test},_tags={Old}}', tag);
+      const library = parseVerbatim(changed.bib);
+      expect(library.errors).toEqual([]);
+      expect(library.entries).toHaveLength(1);
+      expect(entryTags(library.entries[0]!.fields._tags!)).toEqual(['Old', tag]);
+      expect(addEntryTag(changed.bib, tag).bib).toBe(changed.bib);
+    }
+  });
+  test('rejects comma-containing, empty and non-single-entry additions', () => {
+    expect(() => addEntryTag('@misc{x,title={Test}}', 'a,b')).toThrow('カンマ');
+    expect(() => addEntryTag('@misc{x,title={Test}}', ' ')).toThrow('空');
+    for (const input of ['', '@misc{broken', '@misc{x,title={A}} @misc{y,title={B}}']) expect(() => addEntryTag(input, 'Tag')).toThrow('1件');
+  });
+});
 test('conversion removes location and its address alias while retaining custom fields and download dates', () => {
   const converted = first('@book{book,author={山田, 太郎},date={2026},location={東京},address={大阪},_download_at={2020-01-01},_notes={Keep},_tags={Tag},_memo={Memo}}');
   expect(converted.fields.location).toBeUndefined();
